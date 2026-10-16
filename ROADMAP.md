@@ -232,3 +232,50 @@ Careful (no blocks, 1 can/lap) always finishes with margin; normal (6 block hits
 ## Rule of thumb
 Phases 0–3 = **one game, fully playable offline.** Phases 4–6 = make it *social*.
 Nothing in 4–6 breaks 0–3: the bots version stays as practice/solo mode forever.
+
+---
+
+## PROMPT 2 diagnostics (read 2026-10-16, no code changed)
+
+Read ROADMAP.md + GAME.md + handoff.md. State of the world going into Phases 13–15:
+
+- Solo offline + local wallet exist (Phases 0–3, IndexedDB/LocalStorage). Phase 13 removes them — biggest cut: offline PWA/airplane mode and the `rk.profile.v2` local wallet go away; practice/missions stay but connected.
+- Server address is a paste box (`netServer` input, `defaultServerURL()`). Phase 13 bakes it in (build-time constant + same-host fallback).
+- Identity today = self-chosen username (`netName`, `HELLO {name}`). Phase 13 replaces with server-generated tags (e.g. `RK-7F3K`); roster/race-list/car-card must show tags, bots get 🤖 + per-bot colors.
+- Matchmaking today = instant fill-or-new-room. Phase 13 adds: 15 s wait → backfill bots to 6; private rooms: host + invite link (`?room=CODE` auto-join lobby), start at 6 or host early-start, bots only if host opts in.
+- Economy today = money ($-signs) + gems; shop mixes gold/gems. Phase 14 renames money → **coins**, adds **gold** (rare, feat-earned: wreck premium-vehicle owner, 3× same victim), gold buys limited cosmetic skins only (~200/500), vehicles/upgrades stay coin-priced; gold packs (20/₦500, 45/₦1,000, 100/₦2,000) in config, unwired, free while testing; handoff $/pay-to-win wording fixed. Banners already owner-only (config-driven) — Phase 14 keeps + enforces it.
+- Visuals are procedural box-primitive (honest gaps logged in Phases 7/9). Phase 15 pushes code-only look max, then names real assets to buy.
+
+---
+
+## PHASE 13 — Online-Only Rework ⬜ PLANNED (PROMPT 2)
+**Goal:** Online-only game. No offline solo, no local wallet; connected practice/missions stay.
+
+- [ ] Remove offline solo play + local wallet (IndexedDB/LocalStorage profile paths retired; server account is the wallet)
+- [ ] Connected practice/mission mode vs bots (server session, server awards)
+- [ ] Baked-in server address (no paste box); Quick Match just works
+- [ ] Quick Match: ~15 s wait for humans → backfill bots to 6
+- [ ] Server-generated identity tags on car cards + race list (no usernames); bots = 🤖 head icon in per-bot colors
+- [ ] Private matches: host creates room → invite link (`?room=CODE`) opens waiting lobby → friends auto-join → starts at 6; host early-start with fewer, no bots unless host adds
+- [ ] **Deliverable:** online-only build + lobby flow
+
+## PHASE 14 — Premium Economy ⬜ PLANNED (PROMPT 2)
+**Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.
+
+- [ ] Rename money → coins everywhere (code, UI, docs); gold = rare premium currency
+- [ ] Gold earned only via hard feats (wreck a premium-vehicle owner; wreck the same player 3× in one race)
+- [ ] Gold buys limited cosmetic skins only (~200 / ~500 gold); vehicles + stat upgrades = coins only
+- [ ] Gold packs in config (20/₦500, 45/₦1,000, 100/₦2,000), unwired, everything free while testing
+- [ ] Fix handoff.md pay-to-win claim + dollar signs; banners stay owner-only (server config, one change → all players, no uploads)
+- [ ] **Deliverable:** coins/gold economy live + docs corrected
+
+## PHASE 15 — Visual Upgrade ⬜ PLANNED (PROMPT 2)
+**Goal:** Code-only premium look, then an honest buy list.
+
+- [ ] Push cars, road, effects as far as code can go
+- [ ] Honest report: what still looks weak + which real models/textures to buy
+- [ ] Reminder: make the GitHub repo private before launch
+- [ ] Risks list; ROADMAP.md updated; report with files changed + how to run
+- [ ] **Deliverable:** best-possible procedural visuals + asset buy list
+
+**Rule:** game only. No admin UI in this repo (separate project later). Update this file as each phase lands; build one phase at a time, asking before moving on.
