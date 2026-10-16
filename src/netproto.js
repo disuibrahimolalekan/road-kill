@@ -40,9 +40,26 @@ export const MSG = {
   LOADOUT: 'loadout',       // C->S {vehicle, mounts:[{type,ammo}], fuelMax}
   REVIVE: 'revive',         // C->S {} -> S->C REVIVE_OK {ok, reason?, cost?, gems?}
   REVIVE_OK: 'revive-ok',
+  // Phase 13 — tags, matchmaking, private rooms, server-minted tokens
+  START: 'start',           // S->C {humans, bots, inSec} race start signal
+  START_REQ: 'start-req',   // C->S {bots} host early-start (private rooms)
+  TOKEN: 'token',           // C->S {value} money-token collect claim -> S->C AWARD
   ERROR: 'error',
   BYE: 'bye',
 };
+
+// Phase 13 — stable server-generated identity tags (no usernames).
+// Deterministic per account: same account, same tag, every session.
+export function tagFor(accountId) {
+  const s = String(accountId || 'guest');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let t = '';
+  for (let i = 0; i < 4; i++) { t += chars[h % chars.length]; h = Math.floor(h / chars.length); }
+  return 'RK-' + t;
+}
 
 export const QUICK_CHAT = ['GG!', 'Nice shot!', 'Eat dust!', 'Sorry!', 'Rematch?', 'On your left!'];
 

@@ -239,3 +239,16 @@ export function loadoutAmmoLedger(mounts) {
   }
   return ledger;
 }
+
+// Phase 13 — server-minted money tokens (replaces the local wallet).
+// Bounded per claim so collectors can't invent cash.
+export const TOKEN_MAX_VALUE = 48;
+export function awardToken(db, accountId, value) {
+  const v = Math.max(0, Math.min(TOKEN_MAX_VALUE, value | 0));
+  if (!v) return { money: 0 };
+  const p = profileOf(db, accountId);
+  p.money += v;
+  p.stats.moneyCollected = (p.stats.moneyCollected || 0) + v;
+  saveDB(db);
+  return { money: v };
+}

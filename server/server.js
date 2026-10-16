@@ -6,8 +6,8 @@
 // Phase 11: banner events (24h stats) + tiny HTTP admin API for the later project.
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { NET_TICK_HZ, NET_MAX_PLAYERS, MSG, makeSnapshotCar, validateMove, validateHit, QUICK_CHAT } from '../src/netproto.js';
-import { loadDB, saveDBNow, getOrCreateAccount, awardKill, awardFinish, leaderboard, buyItem, recordBanner, bannerSummary, bannerConfig, serverRevive, loadoutAmmoLedger, shopConfig } from './db.js';
+import { NET_TICK_HZ, NET_MAX_PLAYERS, MSG, makeSnapshotCar, validateMove, validateHit, QUICK_CHAT, tagFor } from '../src/netproto.js';
+import { loadDB, saveDBNow, getOrCreateAccount, awardKill, awardFinish, awardToken, leaderboard, buyItem, recordBanner, bannerSummary, bannerConfig, serverRevive, loadoutAmmoLedger, shopConfig } from './db.js';
 import { WEAPON_DEFS } from '../src/combat.js';
 import { pgInit, pgPersistAll, pgEnabled } from './pgmirror.js';
 
@@ -63,9 +63,11 @@ function newCode() {
   return rooms.has(c) ? newCode() : c;
 }
 
+// Phase 13 — matchmaking waits. Quick rooms gather humans for 15 s, then start.
+export const QUICK_WAIT_MS = 15000;
 function createRoom() {
   const code = newCode();
-  const room = { code, clients: new Map(), cars: new Map(), createdAt: Date.now(), lastInputAt: new Map(), practice: false };
+  const room = { code, clients: new Map(), cars: new Map(), createdAt: Date.now(), lastInputAt: new Map(), practice: false, waiting: false, waitUntil: 0, private: false, hostId: null, started: false };
   rooms.set(code, room);
   return room;
 }
@@ -79,15 +81,36 @@ function createPracticeRoom() {
 }
 
 function findQuickRoom() {
+  const now = Date.now();
   for (const room of rooms.values()) {
-    if (room.practice) continue;
-    if (room.clients.size < NET_MAX_PLAYERS) return room;
+    if (room.practice || room.private || room.started) continue;
+    // join a waiting room still gathering, else start a fresh wait
+    if (room.waiting && room.clients.size < NET_MAX_PLAYERS && now < room.waitUntil + 30000) return room;
+    if (!room.waiting && !room.started && room.clients.size < NET_MAX_PLAYERS) {
+      room.waiting = true;
+      room.waitUntil = now + QUICK_WAIT_MS;
+      return room;
+    }
   }
-  return createRoom();
+  const room = createRoom();
+  room.waiting = true;
+  room.waitUntil = now + QUICK_WAIT_MS;
+  return room;
+}
+
+// Phase 13 — start a room: humans from roster, bots fill to 6 (unless disabled).
+function startRoom(room, bots = true) {
+  if (room.started) return;
+  room.started = true;
+  room.waiting = false;
+  const humans = [...room.clients.values()].map((c) => ({ id: c.id, tag: c.tag }));
+  const nBots = bots ? Math.max(0, NET_MAX_PLAYERS - humans.length) : 0;
+  broadcast(room, { type: MSG.START, humans, bots: nBots, inSec: 3 });
 }
 
 function rosterOf(room) {
-  return [...room.clients.values()].map((c) => ({ id: c.id, name: c.name, skin: c.skin }));
+  // Phase 13: identity tags, never usernames. Bots are client-side (🤖 locally).
+  return [...room.clients.values()].map((c) => ({ id: c.id, tag: c.tag, skin: c.skin }));
 }
 
 function broadcast(room, obj, exceptId = null) {
@@ -125,6 +148,7 @@ const inputRates = new Map();
 const fireRates = new Map();
 const buyRates = new Map(); // Phase 9 shop rate limit
 const bannerRates = new Map(); // Phase 11 banner event rate limit
+const tokenRates = new Map(); // Phase 13 money-token claim rate limit
 
 function strike(room, id, reason) {
   const c = room.clients.get(id);
@@ -140,7 +164,7 @@ function strike(room, id, reason) {
 wss.on('connection', (ws) => {
   const id = 'p' + (clientSeq++);
   let room = null;
-  let name = 'Racer' + id;
+  let tag = 'RK-????'; // Phase 13: assigned at HELLO from accountId
   let skin = 'default';
   let accountId = null;
   let lastEmoteAt = 0;
@@ -150,12 +174,13 @@ wss.on('connection', (ws) => {
     try { m = JSON.parse(buf.toString()); } catch { return send(ws, { type: MSG.ERROR, reason: 'bad-json' }); }
 
     if (m.type === MSG.HELLO) {
-      name = String(m.name || name).slice(0, 16);
+      // Phase 13: no usernames — identity is the server-generated tag.
       skin = String(m.skin || 'default').slice(0, 24);
-      const acc = getOrCreateAccount(db, m.accountId, name, skin);
+      const acc = getOrCreateAccount(db, m.accountId, null, skin);
       accountId = acc.id;
+      tag = tagFor(acc.id);
       send(ws, { type: MSG.WELCOME, clientId: id, tickHz: NET_TICK_HZ });
-      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, money: acc.money, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
+      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, tag, money: acc.money, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
       return;
     }
 
@@ -195,6 +220,12 @@ wss.on('connection', (ws) => {
     if (m.type === MSG.JOIN) {
       if (m.mode === 'practice') {
         room = createPracticeRoom();
+      } else if (m.mode === 'host') {
+        // Phase 13 private room: this client is the host.
+        room = createRoom();
+        room.private = true;
+        room.waiting = true;
+        room.hostId = id;
       } else if (m.mode === 'code' && m.code) {
         const code = String(m.code).toUpperCase().trim();
         room = rooms.get(code) || null;
@@ -204,15 +235,37 @@ wss.on('connection', (ws) => {
       }
       if (room.practice && room.clients.size >= 1) return send(ws, { type: MSG.ERROR, reason: 'room-full' });
       if (room.clients.size >= NET_MAX_PLAYERS) return send(ws, { type: MSG.ERROR, reason: 'room-full' });
-      room.clients.set(id, { id, ws, name, skin, accountId, strikes: 0, revives: 0 });
-      if (!room.cars.has(id)) room.cars.set(id, { id, name, skin, accountId, x: 0, z: 0, yaw: 0, speed: 0, hp: 100, wrecked: false, lap: 0, fuel: 60, fuelMax: 120, ammo: { mg: 300 } });
+      if (room.started) return send(ws, { type: MSG.ERROR, reason: 'started' });
+      room.clients.set(id, { id, ws, tag, skin, accountId, strikes: 0, revives: 0 });
+      if (!room.cars.has(id)) room.cars.set(id, { id, name: tag, skin, accountId, x: 0, z: 0, yaw: 0, speed: 0, hp: 100, wrecked: false, lap: 0, fuel: 60, fuelMax: 120, ammo: { mg: 300 } });
       room.lastInputAt.set(id, Date.now());
-      send(ws, { type: MSG.JOINED, roomCode: room.code, slot: room.clients.size, roster: rosterOf(room), practice: !!room.practice });
+      send(ws, { type: MSG.JOINED, roomCode: room.code, slot: room.clients.size, roster: rosterOf(room), practice: !!room.practice, private: !!room.private, host: room.hostId === id });
       broadcast(room, { type: MSG.ROSTER, roster: rosterOf(room) });
+      // private room fills to 6 → auto-start (host may start early instead)
+      if (room.private && room.clients.size >= NET_MAX_PLAYERS) startRoom(room, true);
       return;
     }
 
     if (!room) return send(ws, { type: MSG.ERROR, reason: 'not-joined' });
+
+    // Phase 13 — host early-start (private rooms). Guests wait for START.
+    if (m.type === MSG.START_REQ) {
+      if (!room.private || room.hostId !== id || room.started) return;
+      const bots = m.bots !== false; // default: fill to 6 unless host says no bots
+      startRoom(room, bots);
+      return;
+    }
+
+    // Phase 13 — money-token claims: server mints bounded token cash.
+    if (m.type === MSG.TOKEN) {
+      if (!accountId) return;
+      if (!hitRate(tokenRates, id, 10)) return;
+      const value = Math.max(0, Math.min(48, +m.value || 0));
+      if (!value) return;
+      const r = awardToken(db, accountId, value);
+      send(ws, { type: MSG.AWARD, money: r.money, xp: 0, reason: 'token' });
+      return;
+    }
 
     if (m.type === MSG.INPUT) {
       if (!hitRate(inputRates, id, 40)) { strike(room, id, 'input-flood'); return; }
@@ -237,7 +290,7 @@ wss.on('connection', (ws) => {
       // only clears wrecked after paying gems locally, so trust the transition.
       if (car.wrecked && !m.wrecked && car.hp <= 0) { car.hp = 100; car.wrecked = false; }
       car.lap = m.lap | 0;
-      car.name = name; car.skin = skin;
+      car.name = tag; car.skin = skin;
       room.lastInputAt.set(id, now);
       return;
     }
@@ -346,7 +399,7 @@ wss.on('connection', (ws) => {
       lastEmoteAt = now;
       const text = String(m.text || '').slice(0, 24);
       if (!text) return;
-      broadcast(room, { type: MSG.EMOTE, from: id, name, text });
+      broadcast(room, { type: MSG.EMOTE, from: id, name: tag, text });
       return;
     }
 
@@ -365,14 +418,19 @@ wss.on('connection', (ws) => {
   });
 });
 
-// 20Hz authoritative snapshot broadcast.
+// 20Hz authoritative snapshot broadcast + Phase 13 matchmaking starts.
 setInterval(() => {
   tickCount++;
+  const now = Date.now();
   for (const room of rooms.values()) {
     if (!room.clients.size) continue;
+    // quick rooms: 15 s wait for humans, then bots fill to 6
+    if (room.waiting && !room.private && !room.started && now >= room.waitUntil) {
+      startRoom(room, true);
+    }
     broadcast(room, snapshotOf(room));
   }
 }, Math.round(1000 / NET_TICK_HZ));
 
-httpServer.listen(PORT, () => console.log(`ROADKILL server on :${PORT} tick=${NET_TICK_HZ}Hz phase=12 (ws + /api/*, pg optional)`));
+httpServer.listen(PORT, () => console.log(`ROADKILL server on :${PORT} tick=${NET_TICK_HZ}Hz phase=13 (ws + /api/*, pg optional)`));
 export { rooms, QUICK_CHAT };

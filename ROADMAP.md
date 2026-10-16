@@ -248,16 +248,18 @@ Read ROADMAP.md + GAME.md + handoff.md. State of the world going into Phases 13�
 
 ---
 
-## PHASE 13 — Online-Only Rework ⬜ PLANNED (PROMPT 2)
+## PHASE 13 — Online-Only Rework ✅ DONE — 2026-10-16
 **Goal:** Online-only game. No offline solo, no local wallet; connected practice/missions stay.
 
-- [ ] Remove offline solo play + local wallet (IndexedDB/LocalStorage profile paths retired; server account is the wallet)
-- [ ] Connected practice/mission mode vs bots (server session, server awards)
-- [ ] Baked-in server address (no paste box); Quick Match just works
-- [ ] Quick Match: ~15 s wait for humans → backfill bots to 6
-- [ ] Server-generated identity tags on car cards + race list (no usernames); bots = 🤖 head icon in per-bot colors
-- [ ] Private matches: host creates room → invite link (`?room=CODE`) opens waiting lobby → friends auto-join → starts at 6; host early-start with fewer, no bots unless host adds
-- [ ] **Deliverable:** online-only build + lobby flow
+- [x] Online-only: TAP connects (baked `wss://roadkill-server.onrender.com` + `?server=` override + last-good memory); no offline solo, no local wallet (server ACCOUNT is truth, token/finish awards only)
+- [x] Practice kept connected (instant start, full bot grid, server wallet); mid-race drops pause → BACK TO LOBBY
+- [x] Quick Match: 15 s gather → auto-start, bots backfill to 6; private rooms: host + `?room=CODE` invite link auto-join lobby, start at 6 or host early-start, bots only if host opts in
+- [x] Server tags (`RK-XXXX`, stable per account) on roster/race-list/killfeed; bots = 🤖 in per-bot colors; usernames + server box removed
+- [x] Sim `sim/sim_phase13.mjs` — 18/18: tags, wait, backfill 2+4, private, host no-bots, token cap ALL PASS; Phase 12 re-green
+- [x] **Deliverable:** online-only build + lobby flow
+
+**Build:** 711 KB `index-C9T2KKPN.js` → `game/dist` (sdcard)
+**Limits (honest):** local bots still simulate per-client (diverge across screens); daily/season bonuses still local (move server-side in Phase 14); skins stay local-visual until the gold shop (Phase 14).
 
 ## PHASE 14 — Premium Economy ⬜ PLANNED (PROMPT 2)
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.

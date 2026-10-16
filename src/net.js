@@ -6,6 +6,23 @@ import { MSG, NET_TICK_HZ, NET_INPUT_RATE_HZ, QUICK_CHAT } from './netproto.js';
 
 export { QUICK_CHAT };
 
+// Phase 13 — baked-in server address (no paste box).
+// Production server goes here; ?server= overrides once (dev), last good URL sticks.
+export const BUILTIN_SERVER_URL = 'wss://roadkill-server.onrender.com';
+export function resolveServerURL() {
+  try {
+    const q = new URLSearchParams(location.search).get('server');
+    if (q) return q;
+    const last = localStorage.getItem('rk.server.url');
+    if (last) return last;
+  } catch {}
+  if (BUILTIN_SERVER_URL) return BUILTIN_SERVER_URL;
+  return defaultServerURL();
+}
+export function rememberServerURL(url) {
+  try { localStorage.setItem('rk.server.url', url); } catch {}
+}
+
 const SNAP_DELAY_MS = 100;
 const RECONCILE_SNAP_DIST = 12; // >12u error = snap, else lerp
 const RECONCILE_LERP = 0.35;
@@ -33,6 +50,9 @@ export class NetClient {
     this.onAccount = null;
     this.onAward = null;
     this.onBoard = null;
+    this.onStart = null;
+    this.onDisconnect = null; // Phase 13: mid-race drops return to lobby
+    this.tag = null; // Phase 13 server-generated identity tag
     this._pingT = 0;
   }
 
@@ -49,7 +69,7 @@ export class NetClient {
       this.ws = ws;
       ws.onopen = () => { this.connected = true; resolve(); };
       ws.onerror = () => { if (!this.connected) reject(new Error('ws-connect-failed')); };
-      ws.onclose = () => { this.connected = false; this.online = false; };
+      ws.onclose = () => { this.connected = false; this.online = false; if (this.onDisconnect) { try { this.onDisconnect(); } catch {} } };
       ws.onmessage = (ev) => this._onMessage(ev.data);
       setTimeout(() => { if (!this.connected) { try { ws.close(); } catch {} reject(new Error('ws-timeout')); } }, 8000);
     });
@@ -63,6 +83,9 @@ export class NetClient {
   joinQuick() { this._send({ type: MSG.JOIN, mode: 'quick' }); }
   joinCode(code) { this._send({ type: MSG.JOIN, mode: 'code', code }); }
   joinPractice() { this._send({ type: MSG.JOIN, mode: 'practice' }); }
+  joinHost() { this._send({ type: MSG.JOIN, mode: 'host' }); }
+  sendStartReq(bots) { this._send({ type: MSG.START_REQ, bots: bots !== false }); }
+  sendToken(value) { this._send({ type: MSG.TOKEN, value }); }
 
   sendInput({ steer, accel, boost, fire, pos, yaw, speed, hp, wrecked, lap, fuel }) {
     this.seq++;
@@ -100,6 +123,7 @@ export class NetClient {
     else if (m.type === MSG.BOARD_DATA) { if (this.onBoard) this.onBoard(m); }
     else if (m.type === MSG.BUY_OK) { if (this.onBuy) this.onBuy(m); }
     else if (m.type === MSG.REVIVE_OK) { if (this.onReviveOk) this.onReviveOk(m); }
+    else if (m.type === MSG.START) { if (this.onStart) this.onStart(m); }
     else if (m.type === MSG.PONG) { this.lastRtt = performance.now() - this._pingT; }
     else if (m.type === MSG.ERROR) {
       if (m.correct && this.onError) this.onError(m);

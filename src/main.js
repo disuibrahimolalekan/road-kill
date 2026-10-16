@@ -17,7 +17,7 @@ import {
   recordMatch, getMatches, enqueueSyncOp, getSyncQueueCount, flushSyncQueueStub,
   registerServiceWorker
 } from './storage.js';
-import { NetClient, QUICK_CHAT, defaultServerURL } from './net.js';
+import { NetClient, QUICK_CHAT, defaultServerURL, resolveServerURL, rememberServerURL } from './net.js';
 import { getAccountId, setAccountId, exportSyncCode, importSyncCode, supabaseSync } from './backend.js';
 import { TRACKS } from './tracks.js';
 import SHOP_CONFIG from '../shop-config.json';
@@ -965,7 +965,16 @@ function renderRoster(roster) {
   if (!rosterList) return;
   if (!roster || !roster.length) { rosterList.textContent = 'No lobby yet.'; return; }
   renderRosterCache = roster;
-  rosterList.innerHTML = roster.map((r) => `<div>${(net && r.id === net.clientId) ? '⭐ ' : ''}${r.name} <span style="opacity:.5">${r.id}</span></div>`).join('');
+  // Phase 13: tags for humans, never usernames.
+  rosterList.innerHTML = roster.map((r) => `<div>${(net && r.id === net.clientId) ? '⭐ ' : ''}👤 ${r.tag || r.id} <span style="opacity:.5">${r.id}</span></div>`).join('') || 'Waiting…';
+  const n = roster.length;
+  if (lobbyInfo) lobbyInfo.textContent = isHost
+    ? `PRIVATE ROOM ${net ? net.roomCode : ''} — ${n}/6 racers`
+    : `SEARCHING… ${n}/6 racers — starts full or in ~15 s (bots fill)`;
+  if (inviteRow) inviteRow.style.display = isHost && net && net.roomCode ? '' : 'none';
+  if (inviteLink && net && net.roomCode) inviteLink.textContent = inviteURL(net.roomCode);
+  if (botsRow) botsRow.style.display = isHost ? 'flex' : 'none';
+  if (startBtn) startBtn.style.display = isHost ? '' : 'none';
 }
 let renderRosterCache = [];
 function setOnlineMode(on) {
@@ -982,8 +991,7 @@ function openOnline() { if (onlineOverlay) onlineOverlay.classList.add('show'); 
 function closeOnline() { if (onlineOverlay) onlineOverlay.classList.remove('show'); }
 if (onlineBtn) onlineBtn.addEventListener('click', openOnline);
 if (onlineClose) onlineClose.addEventListener('click', closeOnline);
-if (netName && !netName.value) { try { netName.value = 'Racer' + Math.floor(Math.random() * 900 + 100); } catch {} }
-if (netServer && !netServer.value) { try { netServer.value = defaultServerURL(); } catch {} }
+// Phase 13: no username/server boxes — baked server + server tags (netName/netServer elements removed).
 if (chatRow && !chatRow.children.length) {
   QUICK_CHAT.forEach((q) => {
     const b = document.createElement('button');
@@ -992,32 +1000,69 @@ if (chatRow && !chatRow.children.length) {
     chatRow.appendChild(b);
   });
 }
-async function connectNet(mode) {
-  const url = (netServer && netServer.value.trim()) || defaultServerURL();
-  netNameSelf = ((netName && netName.value.trim()) || 'Racer').slice(0, 16);
+async function ensureConnected() {
+  if (net && net.connected) return true;
+  const url = resolveServerURL();
   if (netStatus) netStatus.textContent = 'Connecting…';
   try {
     if (net) { try { net.disconnect(); } catch {} }
     net = new NetClient();
     wireNet(net);
     await net.connect(url);
-    net.hello(netNameSelf, profile.equippedSkin || 'default', getAccountId());
+    rememberServerURL(url);
+    net.hello('', profile.equippedSkin || 'default', getAccountId());
     await new Promise((r) => setTimeout(r, 250));
-    if (mode === 'code') {
-      const code = ((netCode && netCode.value.trim()) || '').toUpperCase();
-      if (code) net.joinCode(code); else net.joinQuick();
-    } else if (mode === 'practice') net.joinPractice();
-    else net.joinQuick();
-    netPractice = (mode === 'practice');
-    setOnlineMode(true);
-    restart();
-    startGame();
-    if (netStatus) netStatus.textContent = 'Joined! Waiting for roster…';
+    return true;
   } catch (e) {
-    if (netStatus) netStatus.textContent = 'Connect failed: ' + (e.message || e) + ' — solo still works.';
+    if (netStatus) netStatus.textContent = 'Connect failed: ' + (e.message || e) + ' — retry.';
     setOnlineMode(false);
+    return false;
   }
 }
+// Phase 13 lobby flows. Practice starts instantly (bots + server).
+// Quick/private wait for the server START signal (15 s auto-fill).
+let lobbyMode = null;
+let isHost = false;
+async function connectNet(mode, codeOverride) {
+  openOnline();
+  if (!await ensureConnected()) return;
+  lobbyMode = mode;
+  isHost = (mode === 'host');
+  netPractice = (mode === 'practice');
+  if (mode === 'code') {
+    const code = ((codeOverride || (netCode && netCode.value.trim())) || '').toUpperCase();
+    if (!code) { if (netStatus) netStatus.textContent = 'Paste an invite room code.'; return; }
+    net.joinCode(code);
+  } else if (mode === 'host') net.joinHost();
+  else if (mode === 'practice') net.joinPractice();
+  else net.joinQuick();
+  setOnlineMode(true);
+  if (mode === 'practice') {
+    // instant start, full bot grid, server-backed wallet
+    hideLobbyPanel();
+    restart();
+    startGame();
+    if (netStatus) netStatus.textContent = 'Practice — bots + server wallet.';
+  } else {
+    showLobbyPanel();
+    if (netStatus) netStatus.textContent = mode === 'host' ? 'Private room ready — share the invite link.' : 'Searching for racers… (bots fill after ~15 s)';
+  }
+}
+function inviteURL(code) {
+  try { return location.origin + location.pathname + '?room=' + code; }
+  catch { return '?room=' + code; }
+}
+// ?room=CODE deep link: connect + drop straight into the waiting lobby.
+setTimeout(() => {
+  try {
+    const code = new URLSearchParams(location.search).get('room');
+    if (code) {
+      openOnline();
+      if (netCode) netCode.value = code.toUpperCase();
+      connectNet('code', code);
+    }
+  } catch {}
+}, 600);
 function wireNet(n) {
   n.onRoster = (roster) => {    renderRoster(roster);
     if (netStatus && n.roomCode) netStatus.textContent = `Room ${n.roomCode} — ${roster.length}/6 racers`;
@@ -1027,6 +1072,17 @@ function wireNet(n) {
   n.onAccount = (m) => {
     if (m.accountId) setAccountId(m.accountId);
     flushBannerQueue(); // Phase 11: send queued offline banner events
+    // Phase 13: tag identity + server wallet mirror (server is truth, no local wallet).
+    if (m.tag) {
+      profile.tag = m.tag;
+      if (net) net.tag = m.tag;
+      const tagVal = document.getElementById('tagVal');
+      if (tagVal) tagVal.textContent = m.tag;
+    }
+    if (typeof m.money === 'number') profile.money = m.money;
+    if (typeof m.gems === 'number') profile.gems = m.gems;
+    if (typeof m.xp === 'number' && m.xp > profile.xp) profile.xp = m.xp;
+    refreshEconHUD();
     if (netStatus && n.roomCode) netStatus.textContent = `Room ${n.roomCode} — server wallet $${m.money} · ${m.xp}XP`;
     // Phase 9: server inventory (shop-confirmed) merges into local profile
     if (m.inventory) {
@@ -1063,6 +1119,39 @@ function wireNet(n) {
     refreshEconHUD(); persistProfile(true);
     popMoney(`-${m.cost} 💎 (server)`,'gem');
     applyPlayerRevive();
+  };
+  // Phase 13 race start: countdown, then local grid sized by the server.
+  n.onStart = (m) => {
+    hideLobbyPanel();
+    closeOnline();
+    const bots = Math.max(0, Math.min(5, m.bots | 0));
+    const humans = Array.isArray(m.humans) ? m.humans.length : 0;
+    let sec = Math.max(1, m.inSec | 0 || 3);
+    paused = false; pauseOverlay.classList.remove('show');
+    centerMsg.style.display = '';
+    const tick = () => {
+      if (sec > 0) {
+        centerMsg.innerHTML = `<h1>${sec}</h1><p>${humans} HUMANS + ${bots} BOTS — GET READY</p>`;
+        sec--;
+        setTimeout(tick, 1000);
+      } else {
+        restart();
+        setBotCount(bots);
+        startGame();
+        popMoney(`${humans}V${bots}B — RACE!`, 'xp');
+      }
+    };
+    tick();
+  };
+  // Phase 13: mid-race drops pause the game and return to the lobby.
+  n.onDisconnect = () => {
+    if (!started || finished) { setOnlineMode(false); return; }
+    paused = true;
+    window.__dropLobby = true;
+    pauseTitle.textContent = 'DISCONNECTED';
+    pauseSub.textContent = 'Connection lost. Reconnect to race.';
+    pauseOverlay.classList.add('show');
+    document.getElementById('restartBtn').textContent = 'BACK TO LOBBY';
   };
   n.onAward = (m) => {
     // Server is the only minter: apply its award to the local wallet mirror.
@@ -1104,8 +1193,16 @@ function wireNet(n) {
 }
 function pushKillFeedSilent(attackerId, targetId, weapon) {
   try {
+    // Phase 13: resolve roster tags so the feed shows RK-XXXX, never raw ids.
+    const tagOf = (id) => {
+      if (id === (net && net.clientId)) return profile.tag || id;
+      const r = (renderRosterCache || []).find((x) => x.id === id);
+      if (r && r.tag) return r.tag;
+      for (const g of remoteGhosts) if (g.netId === id && g.name) return g.name;
+      return id;
+    };
     const div = document.createElement('div'); div.className = 'kill';
-    div.textContent = `🌐 ${attackerId} → ${targetId} (${weapon || 'hit'})`;
+    div.textContent = `👤 ${tagOf(attackerId)} → ${tagOf(targetId)} (${weapon || 'hit'})`;
     killFeedEl.appendChild(div);
     setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 400); }, 2200);
   } catch {}
@@ -1114,6 +1211,36 @@ if (quickMatchBtn) quickMatchBtn.addEventListener('click', () => connectNet('qui
 if (joinCodeBtn) joinCodeBtn.addEventListener('click', () => connectNet('code'));
 const practiceBtn = document.getElementById('practiceBtn');
 if (practiceBtn) practiceBtn.addEventListener('click', () => connectNet('practice'));
+const hostBtn = document.getElementById('hostBtn');
+if (hostBtn) hostBtn.addEventListener('click', () => connectNet('host'));
+const lobbyPanel = document.getElementById('lobbyPanel');
+const lobbyInfo = document.getElementById('lobbyInfo');
+const inviteRow = document.getElementById('inviteRow');
+const inviteLink = document.getElementById('inviteLink');
+const copyInviteBtn = document.getElementById('copyInviteBtn');
+const botsRow = document.getElementById('botsRow');
+const botsToggle = document.getElementById('botsToggle');
+const startBtn = document.getElementById('startBtn');
+function showLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = ''; }
+function hideLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = 'none'; }
+if (copyInviteBtn) copyInviteBtn.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(inviteLink.textContent); popMoney('LINK COPIED', 'xp'); }
+  catch { popMoney(inviteLink.textContent, ''); }
+});
+if (startBtn) startBtn.addEventListener('click', () => {
+  if (!net || !isHost) return;
+  net.sendStartReq(botsToggle ? botsToggle.checked : true);
+  startBtn.disabled = true;
+});
+// Phase 13 race start: server START → countdown → local grid (humans + N bots).
+function setBotCount(n) {
+  let shown = 0;
+  cars.forEach((c) => {
+    if (c.isPlayer) return;
+    if (shown < n) { shown++; c.out = false; c.mesh.visible = true; }
+    else { c.out = true; c.outReason = 'bench'; c.mesh.visible = false; }
+  });
+}
 if (disconnectBtn) disconnectBtn.addEventListener('click', () => {
   try { if (net) net.disconnect(); } catch {}
   setOnlineMode(false);
@@ -1747,7 +1874,8 @@ function tickMoneyTokens(dt){
       if(d < TOKEN_COLLECT_RADIUS){
         t.alive=false;
         if(c.isPlayer){
-          addMoney(profile, t.amount); refreshEconHUD(); popMoney(`+$${t.amount}`);
+          // Phase 13: no local wallet — server mints token cash (AWARD reply).
+          if(isOnline() && net) { try{ net.sendToken(t.amount); }catch{} popMoney(`+$${t.amount} (server)`); }
           // small xp? token not but we keep 0
         } else {
           // bot just removes token (steals) — no economy
@@ -1820,8 +1948,9 @@ function pushKillFeed(killerIdx, victimIdx, weapon){
   const killer=cars[killerIdx], victim=cars[victimIdx];
   const div=document.createElement('div'); div.className='kill';
   const wIcon= WEAPON_DEFS[weapon]?.icon || '💥';
-  const killerName = killer.isPlayer?'YOU':`BOT ${killerIdx}`;
-  const victimName = victim.isPlayer?'YOU':`BOT ${victimIdx}`;
+  // Phase 13: your tag, or 🤖 BOT-n for bots.
+  const killerName = killer.isPlayer?('YOU ' + (profile.tag || '')):`🤖 BOT-${killerIdx}`;
+  const victimName = victim.isPlayer?('YOU ' + (profile.tag || '')):`🤖 BOT-${victimIdx}`;
   div.textContent=`${wIcon} ${killerName} → ${victimName} ${victim.health?`(${weapon})`:''}`;
   div.style.borderLeftColor = killer.isPlayer?'#2ecc71':'#ff3344';
   killFeedEl.appendChild(div);
@@ -1974,8 +2103,18 @@ function spawnShots(owner, shots){
 let paused=false, started=false, finished=false, gameTime=0;
 function togglePause(){ if(finished) return; paused=!paused; pauseOverlay.classList.toggle('show',paused); pauseTitle.textContent=paused?'PAUSED':''; }
 document.getElementById('resumeBtn').addEventListener('click',()=>{ paused=false; pauseOverlay.classList.remove('show'); if(!started) startGame(); });
-document.getElementById('restartBtn').addEventListener('click',()=>{ restart(); paused=false; pauseOverlay.classList.remove('show'); });
-canvas.addEventListener('click',()=>{ if(!started) startGame(); });
+document.getElementById('restartBtn').addEventListener('click',()=>{
+  if (window.__dropLobby) { // Phase 13: disconnect return path (see onDisconnect)
+    window.__dropLobby = false;
+    document.getElementById('restartBtn').textContent = 'RESTART RACE';
+    paused = false; pauseOverlay.classList.remove('show');
+    setOnlineMode(false);
+    openOnline();
+    return;
+  }
+  restart(); paused=false; pauseOverlay.classList.remove('show');
+});
+canvas.addEventListener('click',()=>{ if(!started && !isOnline()) { openOnline(); connectNet('quick'); } });
 function startGame(){ started=true; centerMsg.style.display='none'; try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
 function restart(){
   placeCars(); spawnPickups(); resetRoadblocks(); for(const s of shortcutSegs) s.claimed=false; bannerViewed.clear(); if(likeBtn) likeBtn.classList.remove('show'); finished=false; started=true; gameTime=0; shake=0; hitFlashTimer=0; hideReviveOverlay(); hideOutOverlay();
@@ -2068,7 +2207,7 @@ function updateCar(c, dt, isPlayerCar){
       }}}
       if(dodge!==0){ steerInput += dodge; if(c.cstate.weapon && c.cstate.weapon.type==='mg'){ /* strafe while dodging */ targetSpeed*=0.9; } }
       // avoid other cars
-      for(const other of cars){ if(other===c) continue; if(other.cstate.wrecked) continue; const d=c.pos.distanceTo(other.pos); if(d<7 && d>0.1){ const toOther=new THREE.Vector3().subVectors(other.pos,c.pos); const ang=Math.atan2(toOther.x,toOther.z)-c.yaw; const normAng=Math.atan2(Math.sin(ang),Math.cos(ang)); if(Math.abs(normAng)<0.8) steerInput += (normAng>0?-0.7:0.7); } }
+      for(const other of cars){ if(other===c) continue; if(other.out) continue; if(other.cstate.wrecked) continue; const d=c.pos.distanceTo(other.pos); if(d<7 && d>0.1){ const toOther=new THREE.Vector3().subVectors(other.pos,c.pos); const ang=Math.atan2(toOther.x,toOther.z)-c.yaw; const normAng=Math.atan2(Math.sin(ang),Math.cos(ang)); if(Math.abs(normAng)<0.8) steerInput += (normAng>0?-0.7:0.7); } }
       // Phase 8: steer around roadblocks ahead (Phase 10: also hazards)
       for(let bi=0; bi<blocks.length; bi++){
         const b=blocks[bi]; if(!b.alive) continue;
@@ -2215,7 +2354,7 @@ function updateCar(c, dt, isPlayerCar){
     break; // one block per tick max
   }
   // car-car push + damage
-  for(const other of cars){ if(other===c) continue; const dx=c.pos.x-other.pos.x, dz=c.pos.z-other.pos.z; const d2=dx*dx+dz*dz; const minD=4.2; if(d2<minD*minD && d2>0.01){ const d=Math.sqrt(d2); const push=(minD-d)/minD*0.7; c.pos.x+=dx/d*push*2.2; c.pos.z+=dz/d*push*2.2; c.vel.x+=(dx/d)*3*dt*60; c.vel.z+=(dz/d)*3*dt*60; c.vel.multiplyScalar(0.98);
+  for(const other of cars){ if(other===c || other.out) continue; const dx=c.pos.x-other.pos.x, dz=c.pos.z-other.pos.z; const d2=dx*dx+dz*dz; const minD=4.2; if(d2<minD*minD && d2>0.01){ const d=Math.sqrt(d2); const push=(minD-d)/minD*0.7; c.pos.x+=dx/d*push*2.2; c.pos.z+=dz/d*push*2.2; c.vel.x+=(dx/d)*3*dt*60; c.vel.z+=(dz/d)*3*dt*60; c.vel.multiplyScalar(0.98);
       const relSpeed=Math.hypot(c.vel.x-other.vel.x, c.vel.z-other.vel.z);
       if(relSpeed>11){
         const dmg=Math.min(12, relSpeed*0.45);
@@ -2710,27 +2849,17 @@ function rankCars(){
 function showFinish(rank){
   paused=true; pauseOverlay.classList.add('show');
   hideReviveOverlay();
-  // rewards — solo: local wallet. online: server is the only minter (AWARD msg).
+  // rewards — Phase 13: server is the only minter (AWARD msg). No local wallet.
   const xpGain = XP_REWARDS.finish[Math.min(rank-1, XP_REWARDS.finish.length-1)] || 10;
   const moneyBonus = rank===1? 48 : rank===2? 28 : rank===3? 14 : 6;
   const playerKills = (player && player.cstate && player.cstate.kills) || profile.stats.kills || 0;
   const moneyBefore = profile.stats.moneyCollected || 0;
-  const online = (typeof netMode!=='undefined' && netMode==='online' && typeof net!=='undefined' && net && net.online);
   let r = { levelUp: false };
-  if (online) {
-    try { net.sendFinish(rank); } catch {}
-    profile.stats.races=(profile.stats.races||0)+1;
-    if(rank===1) profile.stats.wins=(profile.stats.wins||0)+1;
-    profile.stats.bestPos=Math.min(profile.stats.bestPos||6, rank);
-    saveProfile(profile); refreshEconHUD(); persistProfile(true);
-  } else {
-    r=grantXP(xpGain);
-    addMoney(profile, moneyBonus);
-    profile.stats.races=(profile.stats.races||0)+1;
-    if(rank===1) profile.stats.wins=(profile.stats.wins||0)+1;
-    profile.stats.bestPos=Math.min(profile.stats.bestPos||6, rank);
-    saveProfile(profile); refreshEconHUD(); persistProfile(true);
-  }
+  try { if(net) net.sendFinish(rank); } catch {}
+  profile.stats.races=(profile.stats.races||0)+1;
+  if(rank===1) profile.stats.wins=(profile.stats.wins||0)+1;
+  profile.stats.bestPos=Math.min(profile.stats.bestPos||6, rank);
+  saveProfile(profile); refreshEconHUD(); persistProfile(true);
   // Phase 3: match history (IndexedDB) + backend-shaped sync op.
   try {
     recordMatch({ rank, laps: TOTAL_LAPS, kills: playerKills, moneyBonus, xpGain, moneyCollected: (profile.stats.moneyCollected||0) - moneyBefore, durationSec: Math.round(gameTime) });
@@ -2766,7 +2895,17 @@ function updateHUD(){
   // damage vignette fade
   if(player.cstate.wrecked || hp<30) damageVignette.style.boxShadow='inset 0 0 90px rgba(255,0,0,.45)';
   else if(hitFlashTimer<=0 && hp>=30) damageVignette.style.boxShadow='inset 0 0 120px rgba(255,0,0,0)';
-  let html=''; order.forEach((c,idx)=>{ const isMe=c.isPlayer; const hp2=Math.round(c.cstate.health); const icon=c.out?'🏁':c.cstate.wrecked?'💀': (c.cstate.weapon? WEAPON_DEFS[c.cstate.weapon.type].icon : '🔫'); const label=isMe?'YOU':(c.netRemote?('🌐 '+(c.netName||'Rival')):('BOT '+c.idx)); const stat=c.out?'OUT':(c.cstate.wrecked?'WRECKED':`${c.lap+1}/${TOTAL_LAPS} ${hp2}% ⛽${Math.round(c.fuel)}`); html+=`<div style="${isMe?'color:#ffcc00;font-weight:900':''}">${idx+1}. ${label} ${stat} ${icon}</div>`; });
+  let html=''; order.forEach((c,idx)=>{
+    const isMe=c.isPlayer; const hp2=Math.round(c.cstate.health);
+    const icon=c.out?'🏁':c.cstate.wrecked?'💀': (c.cstate.weapon? WEAPON_DEFS[c.cstate.weapon.type].icon : '🔫');
+    // Phase 13: humans = server tags, bots = 🤖 in their own color. YOU = your tag.
+    let label;
+    if(isMe) label = 'YOU ' + (profile.tag || '');
+    else if(c.netRemote) label = '👤 ' + (c.netName || c.netId || 'Rival');
+    else { const hex='#'+(c.color||0xffffff).toString(16).padStart(6,'0'); label = `<span style="color:${hex}">🤖 BOT-${c.idx}</span>`; }
+    const stat=c.out?'OUT':(c.cstate.wrecked?'WRECKED':`${c.lap+1}/${TOTAL_LAPS} ${hp2}% ⛽${Math.round(c.fuel)}`);
+    html+=`<div style="${isMe?'color:#ffcc00;font-weight:900':''}">${idx+1}. ${label} ${stat} ${icon}</div>`;
+  });
   positionsEl.innerHTML=`<b>RACE</b><br>`+html;
   // weapon HUD — Phase 8: pickup weapon first, else mounted reserve
   const w=player.cstate.weapon;
@@ -2965,4 +3104,4 @@ if (setTOD) {
 }
 setTODMode(skyTime);
 updateOrientation();
-setTimeout(()=>{ if(!started) centerMsg.innerHTML='<h1>ROAD KILL</h1><p>TAP / CLICK TO START</p><p style="font-size:11px;opacity:.6;margin-top:4px">WASD/ARROWS drive • SPACE boost • J/FIRE shoot • Pickups expire!</p>'; },500);
+setTimeout(()=>{ if(!started) centerMsg.innerHTML='<h1>ROAD KILL</h1><p>TAP TO CONNECT — ONLINE ONLY</p><p style="font-size:11px;opacity:.6;margin-top:4px">Quick match, private rooms & practice — all on the server.</p>'; },500);

@@ -202,7 +202,7 @@
     </div>
     <div id="positions"></div>
     <div id="killFeed"></div>
-    <div id="center-msg"><h1>ROAD KILL</h1><p>TAP TO START • WASD / ARROWS • SPACE BOOST • J / X / FIRE • C JUMP • V CAMERA</p><p style="font-size:11px;opacity:.6;margin-top:4px">Wreck to drop cash — pay gems to revive! 🔄 Landscape recommended</p></div>
+    <div id="center-msg"><h1>ROAD KILL</h1><p>TAP TO CONNECT — ONLINE ONLY</p><p style="font-size:11px;opacity:.6;margin-top:4px">Quick match • Private rooms • Practice — pick in the lobby 🔄 Landscape recommended</p></div>
     <div id="rotatePrompt">🔄 ROTATE FOR BEST VIEW — landscape recommended <button id="rotateHide">OK</button></div>
     <div id="perfHUD"><b>--</b> FPS • -- calls</div>
     <div id="minimap"><canvas id="mini" width="140" height="140"></canvas></div>
@@ -300,22 +300,31 @@
   <div id="onlineOverlay">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <h2 style="font-size:16px;letter-spacing:.08em">ONLINE — 6P LOBBY</h2>
+        <h2 style="font-size:16px;letter-spacing:.08em">ROAD KILL LOBBY</h2>
         <button id="onlineClose" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">✕</button>
       </div>
-      <p id="netStatus" style="font-size:12px;opacity:.7;margin-top:6px">Solo mode (bots). Connect to race real humans.</p>
-      <input id="netName" maxlength="16" placeholder="Your name" />
-      <input id="netServer" placeholder="ws://host:8130" />
-      <input id="netCode" maxlength="4" placeholder="Room code (blank = quick match)" style="text-transform:uppercase" />
-      <button class="row" id="quickMatchBtn">QUICK MATCH</button>
-      <button class="row alt" id="joinCodeBtn">JOIN / CREATE ROOM CODE</button>
+      <p id="netStatus" style="font-size:12px;opacity:.7;margin-top:6px">Connecting…</p>
+      <p id="tagLine" style="font-size:13px;font-weight:900;letter-spacing:.08em;margin-top:6px">YOUR TAG: <span id="tagVal">…</span></p>
+      <input id="netCode" maxlength="4" placeholder="Room code (have an invite? paste it)" style="text-transform:uppercase" />
+      <button class="row" id="quickMatchBtn">⚡ QUICK MATCH (6P)</button>
+      <button class="row alt" id="joinCodeBtn">JOIN ROOM CODE</button>
+      <button class="row alt" id="hostBtn">🔒 HOST PRIVATE MATCH</button>
       <button class="row alt" id="practiceBtn">PRACTICE (BOTS + SERVER)</button>
-      <div id="rosterList">No lobby yet.</div>
+      <div id="lobbyPanel" style="display:none;margin-top:10px;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px">
+        <div id="lobbyInfo" style="font-size:12px;font-weight:900"></div>
+        <div id="inviteRow" style="display:none;margin-top:6px;font-size:11px">
+          INVITE: <code id="inviteLink" style="word-break:break-all"></code>
+          <button id="copyInviteBtn" style="margin-top:6px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">COPY LINK</button>
+        </div>
+        <div id="rosterList">No lobby yet.</div>
+        <label id="botsRow" style="display:none;font-size:12px;font-weight:700;margin-top:8px;gap:8px;align-items:center"><input type="checkbox" id="botsToggle" checked style="width:16px;height:16px" /> Fill empty seats with bots</label>
+        <button class="row" id="startBtn" style="display:none;background:#ffcc00;color:#111">START RACE</button>
+      </div>
       <div id="chatFeed"></div>
       <div id="chatRow"></div>
       <button class="row alt" id="boardBtn">🏆 LEADERBOARD</button>
-      <button class="row warn" id="disconnectBtn">DISCONNECT (BACK TO SOLO)</button>
-      <p style="font-size:10px;opacity:.5;margin-top:8px">Server: <code>node server/server.js 8130</code>. 20Hz tick, speed/teleport checks. Bots stay as solo practice forever.</p>
+      <button class="row warn" id="disconnectBtn">DISCONNECT</button>
+      <p style="font-size:10px;opacity:.5;margin-top:8px">Online only. Humans get server tags (RK-XXXX); bots show 🤖 in color. No bots unless the wait fills or the host adds them.</p>
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>

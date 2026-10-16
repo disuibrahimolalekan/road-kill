@@ -1,0 +1,29 @@
+IDENTITY TAGS
+================================================================
+  PASS  account carries RK tag
+  PASS  same account, same tag (stable identity)
+  PASS  different account, different tag
+
+QUICK MATCH: WAIT + BOT BACKFILL
+================================================================
+  PASS  quick join ok
+  PASS  no instant start (gathering wait)
+  PASS  second human shares the waiting room
+  PASS  roster shows tags, never usernames
+  PASS  START after ~15 s wait
+  PASS  bots backfill to 6 (2 humans + 4 bots)
+
+PRIVATE ROOMS + HOST START
+================================================================
+  PASS  host creates room (host flag + code)
+  PASS  guest joins by code (invite link flow)
+  PASS  no auto-start while waiting (host decides)
+  PASS  host early-start works
+  PASS  host opted out of bots
+
+SERVER-MINTED TOKENS
+================================================================
+  PASS  token claim pays via AWARD
+  PASS  token capped at 48
+================================================================
+ALL MATCHMAKING CHECKS PASS
