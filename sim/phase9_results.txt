@@ -1,0 +1,29 @@
+PHASE 9 VEHICLE AUDIT — careful run, 1 can/lap, no boost spam
+======================================================================================
+  FALCON S      [super] top=40 hp=100 fuel=70x1 slots=1 → sunset:OK f=70  canyon:OK f=70  volcano:OK f=70
+  VORTEX GT     [super] top=46 hp=85 fuel=60x1.1 slots=1 → sunset:OK f=60  canyon:OK f=60  volcano:OK f=60
+  MONARCH       [super] top=38 hp=150 fuel=80x1.05 slots=2 → sunset:OK f=80  canyon:OK f=80  volcano:OK f=80
+  NEBULA RAY    [scifi] top=41 hp=90 fuel=85x0.8 slots=1 → sunset:OK f=85  canyon:OK f=85  volcano:OK f=85
+  PULSAR X      [scifi] top=45 hp=80 fuel=65x1 slots=2 → sunset:OK f=65  canyon:OK f=65  volcano:OK f=65
+  BULWARK       [war  ] top=36 hp=180 fuel=85x1.1 slots=2 → sunset:OK f=85  canyon:OK f=85  volcano:OK f=85
+  MARAUDER      [war  ] top=40 hp=140 fuel=75x1 slots=2 → sunset:OK f=75  canyon:OK f=75  volcano:OK f=75
+  JACKAL RUNNER [war  ] top=44 hp=95 fuel=65x0.95 slots=1 → sunset:OK f=65  canyon:OK f=65  volcano:OK f=65
+  TORTOISE H    [tank ] top=33 hp=220 fuel=95x1.15 slots=2 → sunset:OK f=95  canyon:OK f=95  volcano:OK f=95
+  RHINO SIEGE   [tank ] top=35 hp=200 fuel=90x1.1 slots=2 → sunset:OK f=90  canyon:OK f=90  volcano:OK f=90
+  ROCKET TRIKE  [crazy] top=43 hp=75 fuel=55x1 slots=1 → sunset:OK f=55  canyon:OK f=55  volcano:OK f=55
+  DOOM KART     [crazy] top=39 hp=85 fuel=60x0.9 slots=1 → sunset:OK f=60  canyon:OK f=60  volcano:OK f=60
+
+WEAPON TABLE (ballistics from combat.js, shop from shop-config.json)
+======================================================================================
+  🔫 M-GUN          dmg=8 cd=0.092s dps≈87 raceAmmo=150 fx=— price=FREE mountable=true
+  🚀 ROCKET         dmg=34 cd=0.48s dps≈71 raceAmmo=8 fx=— price=250 gold mountable=true
+  💣 MINE           dmg=54 cd=0.72s dps≈75 raceAmmo=0 fx=— price=FREE mountable=false
+  🛡️ SHIELD         dmg=0 cd=0s dps≈— raceAmmo=0 fx=— price=FREE mountable=false
+  ☄️ PLASMA CASTER  dmg=22 cd=0.34s dps≈65 raceAmmo=14 fx=splash3.5 price=400 gold mountable=true
+  🔹 RAILGUN        dmg=55 cd=1.1s dps≈50 raceAmmo=5 fx=— price=18 gems mountable=true
+  ⚡ EMP BURST      dmg=6 cd=0.8s dps≈8 raceAmmo=4 fx=emp3s price=450 gold mountable=true
+  🐝 SWARM PODS     dmg=60 cd=0.9s dps≈67 raceAmmo=4 fx=homing price=20 gems mountable=true
+
+SHOP TOTALS: buy-everything = $8230 gold + 225 gems · 8 free entries · 12 vehicles / 4 upgrade lines / 8 weapons
+======================================================================================
+ALL VEHICLE CHECKS PASS

@@ -1,0 +1,40 @@
+CHECKPOINT ADVANCE (count=14, maxSkip=4)
+================================================================
+  PASS  normal 5→6 advances, no wrap
+  PASS  finish 13→0 advances + wrap
+  PASS  shortcut 11→1 (skip 3) + wrap
+  PASS  shortcut 4→7 (skip 3), no wrap
+  PASS  skip 5 rejected (too far)
+  PASS  same idx ignored
+  PASS  reverse 5→4 ignored
+  PASS  backward wrap 0→13 ignored
+
+SHORTCUT SAVINGS (chord vs arc, polyline approx)
+================================================================
+  sunset [0.06→0.24] arc≈108u chord≈94u saves≈13u (12.3%)
+  PASS  sunset shortcut saves >8%
+  canyon [0.3→0.48] arc≈96u chord≈75u saves≈21u (22.2%)
+  PASS  canyon shortcut saves >8%
+  volcano [0.55→0.74] arc≈86u chord≈66u saves≈20u (23.8%)
+  PASS  volcano shortcut saves >8%
+
+HAZARD / GATE TUNING
+================================================================
+  debris 6/s → 16.7s to kill from full; drive-through (r≈6 @30u/s ≈ 0.4s) ≈ 2.4 dmg
+  PASS  debris punishes camping, not passing
+  PASS  oil halves handling
+  gate hp=12: ram @20u/s deals ~18 → breaks: true; MG needs 2 rounds
+  PASS  gate always ram-breakable at speed
+  PASS  gate costs MG ammo but not much
+  armored hp=120: MG needs 15 rounds (heavy costs ammo ✓)
+  PASS  armored costs 10+ MG rounds
+  ramp vy=11: airtime ≈ 0.92s, clears jumpable (need jumpY>1.2): max h ≈ 2.5u
+  PASS  ramp clears low blocks
+  PASS  sunset has 3 hazards
+  PASS  sunset has shortcut + 2 ramps
+  PASS  canyon has 3 hazards
+  PASS  canyon has shortcut + 2 ramps
+  PASS  volcano has 3 hazards
+  PASS  volcano has shortcut + 2 ramps
+================================================================
+ALL MAP-FEATURE CHECKS PASS

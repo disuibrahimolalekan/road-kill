@@ -1,0 +1,23 @@
+PHASE 8 BALANCE SIM — 3 laps, fuel/ammo/blocks
+==============================================================================
+
+TRACK sunset  lap≈635u  race≈1905u
+  careful  finish=true fuel=100 hp=90 t=70s laps=3 blocksHit=0 cans=3 ammo 30/270 ok  → PASS
+  normal   finish=true fuel=67 hp=9 t=89s laps=3 blocksHit=6 cans=3 ammo 48/270 ok  → PASS
+  wasteful finish=false fuel=0 hp=96 t=31s laps=1 blocksHit=0 cans=0 ammo 30/150 ok  → PASS (goes out as designed)
+  careless finish=false fuel=0 hp=16 t=47s laps=1 blocksHit=6 cans=0 ammo 48/150 ok  → PASS (goes out as designed)
+
+TRACK canyon  lap≈652u  race≈1956u
+  careful  finish=true fuel=100 hp=90 t=72s laps=3 blocksHit=0 cans=3 ammo 30/270 ok  → PASS
+  normal   finish=true fuel=57 hp=9 t=92s laps=3 blocksHit=6 cans=3 ammo 48/270 ok  → PASS
+  wasteful finish=false fuel=0 hp=96 t=29s laps=1 blocksHit=0 cans=0 ammo 30/150 ok  → PASS (goes out as designed)
+  careless finish=false fuel=0 hp=6 t=44s laps=1 blocksHit=7 cans=0 ammo 51/150 ok  → PASS (goes out as designed)
+
+TRACK volcano  lap≈668u  race≈2004u
+  careful  finish=true fuel=97 hp=90 t=74s laps=3 blocksHit=0 cans=3 ammo 30/270 ok  → PASS
+  normal   finish=true fuel=56 hp=9 t=99s laps=3 blocksHit=6 cans=3 ammo 48/270 ok  → PASS
+  wasteful finish=false fuel=0 hp=96 t=31s laps=1 blocksHit=0 cans=0 ammo 30/150 ok  → PASS (goes out as designed)
+  careless finish=false fuel=0 hp=26 t=40s laps=1 blocksHit=5 cans=0 ammo 45/150 ok  → PASS (goes out as designed)
+
+==============================================================================
+ALL BALANCE CHECKS PASS

@@ -1,0 +1,28 @@
+BANNER EVENTS
+================================================================
+  PASS  15 banners in config (6 brands + 9 people)
+  PASS  view accepted
+  PASS  bump accepted
+  PASS  like accepted
+  PASS  same-day like rejected
+  PASS  other account can like
+  PASS  unknown id rejected
+  PASS  unknown action rejected
+
+24H PRUNING
+================================================================
+  PASS  old views pruned from summary
+  PASS  old likes pruned from summary
+  PASS  summary covers all ids
+  PASS  windowH=1 respected
+
+CONFIG SHAPE
+================================================================
+  sunset: 2 brands, 3 people
+  PASS  sunset has 2 brands + 3 people
+  canyon: 2 brands, 3 people
+  PASS  canyon has 2 brands + 3 people
+  volcano: 2 brands, 3 people
+  PASS  volcano has 2 brands + 3 people
+================================================================
+ALL BANNER CHECKS PASS

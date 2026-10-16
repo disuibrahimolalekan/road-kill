@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ROAD KILL" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <title>ROAD KILL — Phase 7</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#060610;font-family:system-ui,-apple-system,sans-serif}
+    #c{width:100%;height:100%;display:block}
+    #hud{position:fixed;inset:0;pointer-events:none;user-select:none}
+    #topbar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent);color:#fff;font-weight:800}
+    #topbar span{font-size:13px;letter-spacing:.06em;text-transform:uppercase;opacity:.9}
+    #speed{font-size:28px !important;letter-spacing:.02em !important}
+    #speed small{font-size:12px;opacity:.7}
+    #center-msg{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);color:#fff;text-align:center;pointer-events:auto}
+    #center-msg h1{font-size:42px;letter-spacing:.08em;font-style:italic;text-shadow:0 4px 20px rgba(0,0,0,.8)}
+    #center-msg p{opacity:.7;margin-top:6px;font-size:14px}
+    #minimap{position:absolute;bottom:12px;right:12px;width:140px;height:140px;border-radius:10px;border:2px solid rgba(255,255,255,.2);background:rgba(0,0,0,.55);overflow:hidden}
+    #minimap canvas{width:100%;height:100%;display:block}
+    #controls{position:absolute;bottom:12px;left:12px;display:flex;gap:8px;pointer-events:auto}
+    .ctrl{width:56px;height:56px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);touch-action:none}
+    .ctrl:active{background:rgba(255,255,255,.25)}
+    #gas{width:72px;height:72px;background:rgba(255,60,60,.35);border-color:rgba(255,80,80,.6)}
+    #brake{width:64px}
+    #boost{position:absolute;bottom:86px;left:12px;pointer-events:auto;display:flex;gap:8px}
+    #boostBtn{padding:8px 18px;border-radius:20px;border:2px solid #ffcc00;background:rgba(255,204,0,.25);color:#ffeb3b;font-weight:900;letter-spacing:.08em}
+    #boostBtn.on{background:#ffcc00;color:#111}
+    #fireBtn{padding:8px 14px;border-radius:20px;border:2px solid #ff3344;background:rgba(255,50,60,.32);color:#fff;font-weight:900;letter-spacing:.06em}
+    #fireBtn.hasWeapon{background:#ff3344}
+    #fireBtn:active{transform:scale(0.96)}
+    #positions{position:absolute;top:56px;left:12px;color:#fff;font-size:12px;line-height:1.6;background:rgba(0,0,0,.45);padding:8px 10px;border-radius:8px;min-width:130px}
+    #positions b{color:#ffcc00}
+    #pauseOverlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto}
+    #pauseOverlay.show{display:flex}
+    #pauseOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.15);padding:22px 20px;border-radius:14px;min-width:300px;text-align:center}
+    #pauseOverlay button{margin-top:12px;padding:10px 18px;border-radius:10px;border:0;background:#ff3344;color:#fff;font-weight:800;width:100%}
+    #healthbar{position:absolute;top:54px;right:12px;width:140px;height:10px;background:rgba(255,255,255,.15);border-radius:6px;overflow:hidden}
+    #healthfill{height:100%;width:100%;background:linear-gradient(90deg,#2ecc71,#27ae60);transition:width .15s}
+    #healthfill.mid{background:linear-gradient(90deg,#f1c40f,#e67e22)}
+    #healthfill.low{background:linear-gradient(90deg,#e74c3c,#c0392b)}
+    /* Phase 8 fuel + out-of-race */
+    #fuelbar{position:absolute;top:66px;right:12px;width:140px;height:8px;background:rgba(255,255,255,.12);border-radius:5px;overflow:hidden}
+    #fuelfill{height:100%;width:100%;background:linear-gradient(90deg,#ff9a3d,#ffcc00);transition:width .2s}
+    #fuelfill.low{background:linear-gradient(90deg,#e74c3c,#ff6a00)}
+    #outOverlay{position:fixed;inset:0;background:rgba(6,6,16,.85);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:22;padding:16px}
+    #outOverlay.show{display:flex}
+    #outOverlay .card{background:#14141e;border:1px solid rgba(255,154,61,.4);padding:22px 18px;border-radius:16px;min-width:320px;max-width:92vw;text-align:center}
+    #outOverlay h2{font-size:20px;letter-spacing:.08em}
+    #outOverlay button{margin-top:10px;padding:11px 16px;border-radius:10px;border:0;background:#ffcc00;color:#111;font-weight:900;width:100%}
+    #outOverlay button.ghost{background:#2d2d3a;color:#fff}
+    #spectateBadge{position:absolute;top:96px;left:50%;transform:translateX(-50%);background:#1a2a00;border:1px solid #a8ff60;color:#d6ffab;font-weight:900;font-size:11px;letter-spacing:.08em;padding:4px 12px;border-radius:12px;display:none;z-index:6}
+    #spectateBadge.show{display:block}
+    /* Phase 11 like button */
+    #likeBtn{position:absolute;bottom:170px;left:50%;transform:translateX(-50%);display:none;padding:10px 22px;border-radius:24px;border:2px solid #ff6ab0;background:rgba(255,106,176,.3);color:#ffd6e8;font-weight:900;letter-spacing:.06em;pointer-events:auto;z-index:7}
+    #likeBtn.show{display:block}
+    #likeBtn:active{transform:translateX(-50%) scale(.95)}
+    #weaponHUD{position:absolute;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:6px 12px;color:#fff;display:flex;align-items:center;gap:10px;min-width:170px;justify-content:center}
+    #weaponHUD.empty{opacity:.45}
+    #weaponIcon{font-size:18px}
+    #weaponName{font-weight:900;font-size:12px;letter-spacing:.08em}
+    #weaponAmmo{font-size:12px;opacity:.85}
+    #weaponTimer{height:4px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden;margin-top:4px}
+    #weaponTimerFill{height:100%;width:100%;background:linear-gradient(90deg,#ffcc00,#ff6a00);transition:width .15s linear}
+    #weaponWrap{flex:1}
+    #killFeed{position:absolute;top:98px;right:12px;width:220px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+    .kill{font-size:12px;font-weight:800;padding:5px 9px;border-radius:8px;background:rgba(0,0,0,.6);border-left:3px solid #ff3344;color:#fff;animation:killIn .22s ease}
+    @keyframes killIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+    #hitFlash{position:fixed;inset:0;background:radial-gradient(circle at center, rgba(255,30,30,.38), transparent 72%);opacity:0;pointer-events:none;transition:opacity .12s}
+    #hitFlash.show{opacity:1}
+    #damageVignette{position:fixed;inset:0;box-shadow:inset 0 0 120px rgba(255,0,0,.0);pointer-events:none;transition:box-shadow .2s}
+    /* Phase 2 economy & garage */
+    #econBar{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:5px 12px;color:#fff;font-weight:900;font-size:12px;letter-spacing:.06em;z-index:5}
+    #econBar span{display:flex;align-items:center;gap:4px}
+    #moneyEl{color:#ffd700} #gemsEl{color:#70e0ff} #xpEl{color:#a8ff60}
+    #levelBadge{background:linear-gradient(90deg,#ff8a00,#ff2d2d);padding:2px 8px;border-radius:10px;font-size:11px;color:#fff}
+    #econBar button{pointer-events:auto;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:10px;font-weight:900;letter-spacing:.08em;padding:4px 8px;border-radius:12px}
+    #moneyPop{position:absolute;top:42px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none}
+    .pop{font-size:13px;font-weight:900;color:#ffd700;text-shadow:0 1px 6px rgba(0,0,0,.8);animation:popUp .9s ease forwards}
+    .pop.gem{color:#70e0ff}
+    .pop.xp{color:#a8ff60}
+    @keyframes popUp{0%{transform:translateY(0) scale(1);opacity:1}100%{transform:translateY(-28px) scale(1.08);opacity:0}}
+    #reviveOverlay{position:fixed;inset:0;background:rgba(0,0,0,.68);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:20}
+    #reviveOverlay.show{display:flex}
+    #reviveOverlay .card{background:#1a1420;border:1px solid rgba(255,80,80,.4);padding:22px 18px;border-radius:16px;min-width:320px;max-width:92vw;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+    #reviveOverlay h2{font-size:20px;letter-spacing:.08em}
+    #reviveCost{font-size:28px;font-weight:900;margin:10px 0}
+    #reviveCost small{font-size:12px;opacity:.7}
+    #reviveBtn{padding:12px 18px;border-radius:12px;border:0;background:linear-gradient(90deg,#00d2ff,#2de2ff);color:#001018;font-weight:900;width:100%;font-size:15px;letter-spacing:.04em}
+    #reviveBtn:disabled{background:#3a3a45;color:#888}
+    #stayWreckedBtn{margin-top:8px;background:#2d2d3a !important;color:#fff !important}
+    #garageOverlay{position:fixed;inset:0;background:rgba(6,6,16,.88);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:18;overflow:auto;padding:16px}
+    #garageOverlay.show{display:flex}
+    #garageOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.14);padding:18px;border-radius:16px;min-width:320px;max-width:560px;width:100%}
+    #garageGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .skin{border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px;background:rgba(255,255,255,.05);text-align:center}
+    .skin.owned{border-color:rgba(46,204,113,.6)}
+    .skin.equipped{border-color:#ffcc00;background:rgba(255,204,0,.12)}
+    .skin .sw{width:100%;height:46px;border-radius:8px;margin-bottom:8px;border:2px solid rgba(255,255,255,.2)}
+    .skin b{font-size:12px;letter-spacing:.06em}
+    .skin button{margin-top:8px;padding:7px 10px;border-radius:8px;border:0;background:#ff3344;color:#fff;font-weight:800;width:100%;font-size:11px;pointer-events:auto}
+    .skin button.buy{background:#2ecc71}
+    .skin button.equip{background:#ffcc00;color:#111}
+    @media(min-width:700px){#controls{display:none}#boost{left:50%;transform:translateX(-50%);bottom:18px}}
+    /* Phase 3 offline + settings */
+    #offlineBadge{position:absolute;top:54px;left:50%;transform:translateX(-50%);background:#3a2a00;border:1px solid #ffcc00;color:#ffeb3b;font-weight:900;font-size:10px;letter-spacing:.1em;padding:3px 10px;border-radius:12px;display:none;z-index:6}
+    #offlineBadge.show{display:block}
+    #installBtn{display:none}
+    #installBtn.show{display:inline-block;background:#ffcc00 !important;color:#111 !important}
+    #settingsOverlay{position:fixed;inset:0;background:rgba(6,6,16,.88);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:19;padding:16px}
+    #settingsOverlay.show{display:flex}
+    #settingsOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.14);padding:18px;border-radius:16px;min-width:320px;max-width:440px;width:100%}
+    #settingsOverlay label{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;margin-top:12px;gap:10px}
+    #settingsOverlay button.row{margin-top:12px;padding:10px 14px;border-radius:10px;border:0;background:#2d2d3a;color:#fff;font-weight:800;width:100%;pointer-events:auto}
+    #historyList{margin-top:10px;max-height:150px;overflow:auto;font-size:11px;line-height:1.7;opacity:.85;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px}
+    /* Phase 4 online */
+    #netDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:4px}
+    #netDot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}
+    #onlineBtn.online{background:#2ecc71 !important;color:#06130a !important}
+    #onlineOverlay{position:fixed;inset:0;background:rgba(6,6,16,.9);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:21;padding:16px}
+    #onlineOverlay.show{display:flex}
+    #onlineOverlay .card{background:#14141e;border:1px solid rgba(46,204,113,.35);padding:18px;border-radius:16px;min-width:320px;max-width:460px;width:100%;max-height:92vh;overflow:auto}
+    #onlineOverlay input{width:100%;margin-top:8px;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;font-weight:700}
+    #onlineOverlay button.row{margin-top:10px;padding:10px 14px;border-radius:10px;border:0;background:#2ecc71;color:#06130a;font-weight:900;width:100%;pointer-events:auto}
+    #onlineOverlay button.row.alt{background:#2d2d3a;color:#fff}
+    #onlineOverlay button.row.warn{background:#5a1a1a;color:#fff}
+    #rosterList{margin-top:10px;font-size:12px;line-height:1.8;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px;min-height:40px}
+    #chatFeed{margin-top:10px;max-height:120px;overflow:auto;font-size:12px;line-height:1.7;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px}
+    #chatRow{display:flex;gap:6px;margin-top:8px}
+    #chatRow button{flex:1;padding:7px 4px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;font-size:11px;pointer-events:auto}
+    /* Phase 7 premium look + landscape-first controls */
+    #rotatePrompt{position:fixed;top:0;left:0;right:0;z-index:30;display:none;align-items:center;justify-content:center;gap:8px;background:rgba(20,16,0,.92);border-bottom:2px solid #ffcc00;color:#ffeb3b;font-weight:900;font-size:12px;letter-spacing:.06em;padding:9px 12px;text-align:center}
+    #rotatePrompt.show{display:flex}
+    #rotatePrompt button{background:#ffcc00;border:0;border-radius:8px;font-weight:900;padding:4px 10px;font-size:11px}
+    #perfHUD{position:absolute;top:70px;right:12px;color:#9ff;font-size:10px;font-weight:700;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:4px 8px;line-height:1.5;text-align:right;z-index:5}
+    #perfHUD b{color:#fff}
+    #camBtn{padding:8px 14px;border-radius:20px;border:2px solid #2de2ff;background:rgba(45,226,255,.22);color:#c8f6ff;font-weight:900;letter-spacing:.06em}
+    #camBtn:active{transform:scale(.96)}
+    #jumpBtn{padding:8px 14px;border-radius:20px;border:2px solid #a8ff60;background:rgba(168,255,96,.18);color:#e2ffc8;font-weight:900;letter-spacing:.06em}
+    #jumpBtn:active{transform:scale(.96)}
+    #todBtn{padding:8px 14px;border-radius:20px;border:2px solid #ff9a3d;background:rgba(255,154,61,.2);color:#ffd9ad;font-weight:900;letter-spacing:.06em}
+    #settingsOverlay select{width:100%;margin-top:6px;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#23233a;color:#fff;font-weight:700}
+    /* landscape-first: wider HUD spacing, controls docked left/right */
+    @media(orientation:landscape) and (max-height:500px){
+      #center-msg h1{font-size:30px}
+      #positions{font-size:11px;top:48px}
+      #minimap{width:110px;height:110px}
+      #weaponHUD{top:54px;min-width:150px;padding:4px 10px}
+      #perfHUD{top:54px}
+    }
+    /* portrait phones: shrink minimap so controls don't overlap */
+    @media(orientation:portrait) and (max-width:700px){
+      #minimap{width:96px;height:96px;bottom:170px}
+      #positions{max-width:44vw;font-size:11px}
+      #killFeed{width:160px}
+      #boost{flex-wrap:wrap;max-width:62vw;bottom:100px}
+      #boost button{padding:7px 10px;font-size:11px}
+    }
+    #killFeed{top:108px}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hitFlash"></div>
+  <div id="damageVignette"></div>
+  <div id="hud">
+    <div id="econBar">
+      <span id="moneyEl">💰 <b id="moneyVal">0</b></span>
+      <span id="gemsEl">💎 <b id="gemsVal">0</b></span>
+      <span id="levelBadge">LVL 1 • Bronze</span>
+      <span id="xpEl">XP <b id="xpVal">0</b></span>
+      <button id="garageBtn">GARAGE</button>
+      <button id="onlineBtn"><span id="netDot"></span>ONLINE</button>
+      <button id="settingsBtn">⚙</button>
+      <button id="installBtn">INSTALL</button>
+    </div>
+    <div id="offlineBadge">OFFLINE — PROGRESS SAVES LOCALLY</div>
+    <div id="moneyPop"></div>
+    <div id="topbar">
+      <span id="lap">LAP 1 / 3</span>
+      <span id="speed">0 <small>KM/H</small></span>
+      <span id="pos">P1 / 6</span>
+    </div>
+    <div id="healthbar"><div id="healthfill"></div></div>
+    <div id="fuelbar" title="Fuel"><div id="fuelfill"></div></div>
+    <div id="spectateBadge">👁 SPECTATING LEADER — TAP EXIT TO RESTART</div>
+    <button id="likeBtn">♥ LIKE</button>
+    <div id="weaponHUD" class="empty">
+      <div id="weaponIcon">—</div>
+      <div id="weaponWrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span id="weaponName">NO WEAPON</span><span id="weaponAmmo"></span></div>
+        <div id="weaponTimer"><div id="weaponTimerFill"></div></div>
+      </div>
+    </div>
+    <div id="positions"></div>
+    <div id="killFeed"></div>
+    <div id="center-msg"><h1>ROAD KILL</h1><p>TAP TO START • WASD / ARROWS • SPACE BOOST • J / X / FIRE • C JUMP • V CAMERA</p><p style="font-size:11px;opacity:.6;margin-top:4px">Wreck to drop cash — pay gems to revive! 🔄 Landscape recommended</p></div>
+    <div id="rotatePrompt">🔄 ROTATE FOR BEST VIEW — landscape recommended <button id="rotateHide">OK</button></div>
+    <div id="perfHUD"><b>--</b> FPS • -- calls</div>
+    <div id="minimap"><canvas id="mini" width="140" height="140"></canvas></div>
+    <div id="controls">
+      <div class="ctrl" id="left">◀</div>
+      <div class="ctrl" id="gas">▲</div>
+      <div class="ctrl" id="brake">▼</div>
+      <div class="ctrl" id="right">▶</div>
+    </div>
+    <div id="boost">
+      <button id="boostBtn">BOOST</button>
+      <button id="fireBtn">FIRE</button>
+      <button id="jumpBtn">JUMP</button>
+      <button id="camBtn">CAM</button>
+      <button id="todBtn">🌙</button>
+    </div>
+  </div>
+  <div id="outOverlay">
+    <div class="card">
+      <h2 id="outTitle">OUT OF FUEL</h2>
+      <p id="outSub" style="opacity:.75;font-size:13px;margin-top:6px">You ran dry.</p>
+      <button id="spectateBtn">👁 SPECTATE LEADER</button>
+      <button id="outRestartBtn" class="ghost">RESTART RACE</button>
+    </div>
+  </div>
+  <div id="pauseOverlay">    <div class="card">
+      <h2 id="pauseTitle">PAUSED</h2>
+      <p id="pauseSub" style="opacity:.7;margin-top:6px;font-size:13px">Press RESUME to continue</p>
+      <button id="resumeBtn">RESUME</button>
+      <button id="restartBtn" style="background:#2d2d3a;margin-top:8px">RESTART RACE</button>
+      <button id="garageBtn2" style="background:#23233a;margin-top:8px">OPEN GARAGE</button>
+    </div>
+  </div>
+  <div id="reviveOverlay">
+    <div class="card">
+      <h2 id="reviveTitle">WRECKED!</h2>
+      <p id="reviveSub" style="opacity:.75;font-size:13px;margin-top:6px">Pay to get back in the race — price goes up each time.</p>
+      <div id="reviveCost">💎 1 <small>GEMS</small></div>
+      <p id="reviveHint" style="font-size:11px;opacity:.6;margin-bottom:10px"></p>
+      <button id="reviveBtn">REVIVE — 1 GEM</button>
+      <button id="stayWreckedBtn">STAY WRECKED</button>
+      <p style="font-size:10px;opacity:.45;margin-top:8px">After 1 → 5 → 30 gems, next wreck is permanent.</p>
+    </div>
+  </div>
+  <div id="garageOverlay">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="font-size:16px;letter-spacing:.08em">GARAGE</h2>
+        <button id="garageClose" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">✕</button>
+      </div>
+      <p style="font-size:12px;opacity:.65;margin-top:4px">Buy skins with money (visual only, no pay-to-win). Progress saved locally.</p>
+      <div id="garageGrid"></div>
+      <p style="font-size:11px;opacity:.5;margin-top:10px">Money & gems saved in IndexedDB + localStorage (offline-first). Syncs to server in Phase 5.</p>
+    </div>
+  </div>
+  <div id="settingsOverlay">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="font-size:16px;letter-spacing:.08em">SETTINGS</h2>
+        <button id="settingsClose" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">✕</button>
+      </div>
+      <label>Sound <input type="checkbox" id="setAudio" checked /></label>
+      <label>Touch controls <input type="checkbox" id="setTouch" checked /></label>
+      <label style="display:block">Graphics quality
+        <select id="setQuality">
+          <option value="high">HIGH — realistic (default)</option>
+          <option value="simple">SIMPLE — weak devices</option>
+        </select>
+      </label>
+      <label style="display:block">Time of day
+        <select id="setTOD">
+          <option value="night">NIGHT</option>
+          <option value="dusk">DUSK</option>
+          <option value="day">DAY</option>
+          <option value="auto">AUTO CYCLE</option>
+        </select>
+      </label>
+      <p style="font-size:11px;opacity:.6;margin-top:8px">Settings live in LocalStorage. Profile, currency, unlocks + match history live in IndexedDB. Writes queue for the future backend.</p>
+      <div id="syncInfo" style="font-size:11px;opacity:.6;margin-top:6px">Sync queue: 0 pending</div>
+      <div id="historyList">No races yet — finish one!</div>
+      <button class="row" id="flushSyncBtn">TRY SYNC NOW (STUB)</button>
+      <input id="syncCode" placeholder="sync code (cross-device)" style="width:100%;margin-top:10px;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff" />
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="row" id="exportBtn" style="margin-top:0">EXPORT</button>
+        <button class="row" id="importBtn" style="margin-top:0;background:#2de2ff;color:#001018">IMPORT</button>
+      </div>
+      <div style="font-size:12px;font-weight:900;letter-spacing:.06em;margin-top:14px">TRACK</div>
+      <div id="trackRow" style="display:flex;gap:6px;margin-top:8px"></div>
+      <div id="dailyInfo" style="font-size:11px;opacity:.75;margin-top:10px"></div>
+      <div id="seasonInfo" style="font-size:11px;opacity:.75;margin-top:6px"></div>
+      <button class="row" id="claimSeasonBtn">CLAIM SEASON REWARD</button>
+      <button class="row" id="resetProgressBtn" style="background:#5a1a1a">RESET PROGRESS</button>
+    </div>
+  </div>
+  <div id="onlineOverlay">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="font-size:16px;letter-spacing:.08em">ONLINE — 6P LOBBY</h2>
+        <button id="onlineClose" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">✕</button>
+      </div>
+      <p id="netStatus" style="font-size:12px;opacity:.7;margin-top:6px">Solo mode (bots). Connect to race real humans.</p>
+      <input id="netName" maxlength="16" placeholder="Your name" />
+      <input id="netServer" placeholder="ws://host:8130" />
+      <input id="netCode" maxlength="4" placeholder="Room code (blank = quick match)" style="text-transform:uppercase" />
+      <button class="row" id="quickMatchBtn">QUICK MATCH</button>
+      <button class="row alt" id="joinCodeBtn">JOIN / CREATE ROOM CODE</button>
+      <button class="row alt" id="practiceBtn">PRACTICE (BOTS + SERVER)</button>
+      <div id="rosterList">No lobby yet.</div>
+      <div id="chatFeed"></div>
+      <div id="chatRow"></div>
+      <button class="row alt" id="boardBtn">🏆 LEADERBOARD</button>
+      <button class="row warn" id="disconnectBtn">DISCONNECT (BACK TO SOLO)</button>
+      <p style="font-size:10px;opacity:.5;margin-top:8px">Server: <code>node server/server.js 8130</code>. 20Hz tick, speed/teleport checks. Bots stay as solo practice forever.</p>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

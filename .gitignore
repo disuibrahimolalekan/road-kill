@@ -1,0 +1,13 @@
+# dependencies (reinstalled by host)
+node_modules/
+# build output (rebuilt by Vercel)
+dist/
+# server runtime state (fresh per deploy)
+server/db.json
+server/*.log
+*.sim-bak
+# secrets (see server/.env.example)
+.env
+# OS
+.DS_Store
+Thumbs.db

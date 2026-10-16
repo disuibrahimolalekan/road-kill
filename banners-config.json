@@ -1,0 +1,22 @@
+{
+  "_comment": "ROAD KILL banner config — images + positions. Brands are solid (cannot be bumped). People banners can be bumped (drive in) or liked (♥ button when close). Drop images in game/public/banners/; missing files fall back to procedural placeholder boards. Server records views/bumps/likes for the last 24h only.",
+  "brands": [
+    { "id": "brand_nitro",  "name": "NITRO COLA",   "image": "banners/nitro-cola.png",  "color": "#e02a2a", "track": "sunset",  "t": 0.18, "lateral": -17 },
+    { "id": "brand_turbo",  "name": "TURBO TIRES",  "image": "banners/turbo-tires.png", "color": "#2d7dff", "track": "sunset",  "t": 0.66, "lateral": 17 },
+    { "id": "brand_nitro2",  "name": "NITRO COLA",   "image": "banners/nitro-cola.png",  "color": "#e02a2a", "track": "canyon",  "t": 0.40, "lateral": 17 },
+    { "id": "brand_octane",  "name": "OCTANE OIL",   "image": "banners/octane-oil.png",  "color": "#ff9a3d", "track": "canyon",  "t": 0.82, "lateral": -17 },
+    { "id": "brand_volta",   "name": "VOLTA CELLS",  "image": "banners/volta-cells.png", "color": "#2de2ff", "track": "volcano", "t": 0.12, "lateral": -17 },
+    { "id": "brand_turbo2",  "name": "TURBO TIRES",  "image": "banners/turbo-tires.png", "color": "#2d7dff", "track": "volcano", "t": 0.68, "lateral": 17 }
+  ],
+  "people": [
+    { "id": "p_ava",   "name": "AVA",   "image": "banners/ava.png",   "color": "#ff6ab0", "track": "sunset",  "t": 0.34, "lateral": -9 },
+    { "id": "p_rex",   "name": "REX",   "image": "banners/rex.png",   "color": "#a8ff60", "track": "sunset",  "t": 0.55, "lateral": 9 },
+    { "id": "p_mia",   "name": "MIA",   "image": "banners/mia.png",   "color": "#ffcc00", "track": "sunset",  "t": 0.88, "lateral": -9 },
+    { "id": "p_leo",   "name": "LEO",   "image": "banners/leo.png",   "color": "#2de2ff", "track": "canyon",  "t": 0.22, "lateral": 9 },
+    { "id": "p_zoe",   "name": "ZOE",   "image": "banners/zoe.png",   "color": "#cc2dff", "track": "canyon",  "t": 0.58, "lateral": -9 },
+    { "id": "p_max",   "name": "MAX",   "image": "banners/max.png",   "color": "#ff8a3d", "track": "canyon",  "t": 0.94, "lateral": 9 },
+    { "id": "p_ivy",   "name": "IVY",   "image": "banners/ivy.png",   "color": "#39ff88", "track": "volcano", "t": 0.30, "lateral": -9 },
+    { "id": "p_omar",  "name": "OMAR",  "image": "banners/omar.png",  "color": "#ffe14d", "track": "volcano", "t": 0.52, "lateral": 9 },
+    { "id": "p_nia",   "name": "NIA",   "image": "banners/nia.png",   "color": "#ff5a5a", "track": "volcano", "t": 0.86, "lateral": -9 }
+  ]
+}

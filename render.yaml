@@ -1,0 +1,15 @@
+# render.yaml — one-click Render blueprint for the ROAD KILL server.
+# Render → New → Blueprint → select this repo. Then set DATABASE_URL (below).
+services:
+  - type: web
+    name: roadkill-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install --no-bin-links
+    startCommand: node server.js $PORT
+    envVars:
+      # Render provides PORT automatically. Add the two below in Dashboard → Environment.
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,27 @@
+  PASS  server boots with admin API
+PRACTICE + ACCOUNT
+================================================================
+  PASS  account issued with inventory
+  PASS  practice room joined (practice flag)
+  PASS  practice rooms isolated (own room each)
+
+LOADOUT + AMMO LEDGER
+================================================================
+  PASS  ammo ledger enforced (plasma capped at 28)
+  PASS  unknown weapon rejected
+
+SERVER REVIVE LADDER
+================================================================
+  PASS  quick room shared
+  PASS  roster exposes rival id
+  PASS  server hit registration wrecks (hp owned by server)
+  PASS  revive #1 costs 1 gem (server)
+  PASS  revive #2 costs 5 gems (server)
+
+BANNERS + ADMIN
+================================================================
+  PASS  banner view recorded (24h)
+  PASS  banner like recorded (24h)
+  PASS  health endpoint
+================================================================
+ALL LAUNCH CHECKS PASS
