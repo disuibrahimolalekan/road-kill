@@ -5,7 +5,7 @@ import { dailyChallenge } from './tracks.js';
 import { SEASON_ID } from './netproto.js';
 
 export { SEASON_ID };
-export const DAILY_BONUS_MONEY = 100;
+export const DAILY_BONUS_COINS = 100;
 const DAILY_KEY = 'rk.daily.v1';
 
 export const SEASON_REWARDS = [
@@ -27,7 +27,7 @@ export function claimDaily() {
   const { today, claimed, challenge } = getDailyState();
   if (claimed) return { ok: false, reason: 'claimed' };
   try { localStorage.setItem(DAILY_KEY, JSON.stringify({ claimedFor: today })); } catch {}
-  return { ok: true, money: challenge.bonusMoney };
+  return { ok: true, coins: challenge.bonusCoins };
 }
 
 // Season points live on the profile (synced like XP). Returns newly unlocked rewards.

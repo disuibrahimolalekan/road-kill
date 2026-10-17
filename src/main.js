@@ -8,9 +8,9 @@ import {
   addMountedAmmo, activeGun, resetMounts, cycleMount, syncMount, refillMountsPickup
 } from './combat.js';
 import {
-  MONEY_PER_KILL_TOKEN, TOKENS_PER_KILL, TOKEN_LIFETIME, TOKEN_COLLECT_RADIUS, XP_REWARDS, GARAGE_SKINS,
+  COINS_PER_KILL_TOKEN, TOKENS_PER_KILL, TOKEN_LIFETIME, TOKEN_COLLECT_RADIUS, XP_REWARDS, GARAGE_SKINS,
   getTier, xpForLevel, getLevelFromXP, getReviveCost,
-  loadProfile, saveProfile, addMoney, addGems, addXP, canAffordRevive, payRevive, buySkin, equipSkin, createMoneyToken, createDefaultProfile
+  loadProfile, saveProfile, addCoins, addGems, addXP, canAffordRevive, payRevive, buySkin, equipSkin, createCoinToken, createDefaultProfile
 } from './economy.js';
 import {
   loadProfileUnified, saveProfileUnified, loadSettings, saveSettings,
@@ -68,20 +68,51 @@ const fireBtn = document.getElementById('fireBtn');
 const jumpBtn = document.getElementById('jumpBtn');
 const camBtn = document.getElementById('camBtn');
 const todBtn = document.getElementById('todBtn');
-const rotatePrompt = document.getElementById('rotatePrompt');
 const perfHUD = document.getElementById('perfHUD');
 const setQuality = document.getElementById('setQuality');
 const setTOD = document.getElementById('setTOD');
 let camMode = 0; // 0 chase, 1 hood, 2 far
 const CAM_NAMES = ['CHASE', 'HOOD', 'FAR'];
+// ---------- PHASE 16 — phone experience: orientation, fullscreen, viewport, HUD scale ----------
+const rotatePrompt = document.getElementById('rotatePrompt');
+let portraitBlocked = false;
+let wasPausedBeforeRotate = false;
 function updateOrientation(){
   if (!rotatePrompt) return;
   const portrait = innerHeight > innerWidth;
-  const small = Math.min(innerWidth, innerHeight) < 700;
-  rotatePrompt.classList.toggle('show', portrait && small && !rotateDismissed);
+  const small = Math.min(innerWidth, innerHeight) < 900; // phones + small tablets
+  const shouldBlock = portrait && small;
+  portraitBlocked = shouldBlock;
+  rotatePrompt.classList.toggle('show', shouldBlock);
+  if (shouldBlock && started && !paused && !finished) { wasPausedBeforeRotate = true; paused = true; }
+  // resume only when back to landscape AND user hadn't paused manually
+  if (!shouldBlock && wasPausedBeforeRotate && started && !finished) { wasPausedBeforeRotate = false; paused = false; pauseOverlay.classList.remove('show'); }
+  if (typeof updateHudScale === 'function') updateHudScale();
 }
-let rotateDismissed = false;
-if (document.getElementById('rotateHide')) document.getElementById('rotateHide').addEventListener('click', () => { rotateDismissed = true; updateOrientation(); });
+async function tryFullscreenLandscape(){
+  // Called from a real user gesture (tap). Best-effort: fullscreen + landscape lock.
+  try {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' }).catch(()=>{});
+    else if (!document.fullscreenElement && el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch {}
+  try {
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape').catch(()=>{});
+  } catch {}
+}
+// dynamic viewport height + HUD scale — keeps HUD inside safe areas on notched phones
+function updateHudScale(){
+  const w = innerWidth, h = innerHeight;
+  document.documentElement.style.setProperty('--vh', h + 'px');
+  const scale = Math.max(0.62, Math.min(1, Math.min(w / 780, h / 360)));
+  document.documentElement.style.setProperty('--hudscale', String(scale));
+  const hud = document.getElementById('hud');
+  if (hud) { hud.style.transform = `scale(${scale})`; hud.style.width = (w / scale) + 'px'; hud.style.height = (h / scale) + 'px'; }
+  if (typeof renderer !== 'undefined' && renderer) renderer.setSize(w, h);
+  if (typeof camera !== 'undefined' && camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+}
+const rotateFullscreenBtn = document.getElementById('rotateFullscreen');
+if (rotateFullscreenBtn) rotateFullscreenBtn.addEventListener('click', () => tryFullscreenLandscape());
 const pauseOverlay = document.getElementById('pauseOverlay');
 const pauseTitle = document.getElementById('pauseTitle');
 const pauseSub = document.getElementById('pauseSub');
@@ -106,11 +137,11 @@ const killFeedEl = document.getElementById('killFeed');
 const hitFlash = document.getElementById('hitFlash');
 const damageVignette = document.getElementById('damageVignette');
 // Phase 2 economy DOM
-const moneyValEl = document.getElementById('moneyVal');
+const coinsValEl = document.getElementById('coinsVal');
 const gemsValEl = document.getElementById('gemsVal');
 const xpValEl = document.getElementById('xpVal');
 const levelBadgeEl = document.getElementById('levelBadge');
-const moneyPopEl = document.getElementById('moneyPop');
+const coinsPopEl = document.getElementById('coinsPop');
 const reviveOverlay = document.getElementById('reviveOverlay');
 const reviveCostEl = document.getElementById('reviveCost');
 const reviveBtn = document.getElementById('reviveBtn');
@@ -136,7 +167,23 @@ const flushSyncBtn = document.getElementById('flushSyncBtn');
 const resetProgressBtn = document.getElementById('resetProgressBtn');
 
 // ---------- THREE ----------
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// PHASE 16: never let a WebGL failure kill the page (that was one cause of the
+// 'static screen' on phone). Show a clear banner instead; DOM HUD keeps working.
+let webglOK = true;
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  webglOK = false;
+  console.error('[ROADKILL] WebGL unavailable:', e);
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:99;background:#2a0e12;border:1px solid #ff5566;color:#fff;padding:18px 22px;border-radius:12px;font:700 13px system-ui;text-align:center;max-width:86vw';
+  div.innerHTML = '<b>3D NOT SUPPORTED</b><br>This browser has no WebGL. Try Chrome, or update your system WebView.';
+  document.body.appendChild(div);
+  window.__rkBootError = 'WebGL unavailable: ' + (e && e.message || e);
+  // stub renderer so the rest of the module still parses/boots
+  renderer = { setSize(){}, setPixelRatio(){}, render(){}, domElement: canvas, capabilities:{} };
+}
 // Phase 7: HIGH quality by default, SIMPLE only for weak devices (or user choice).
 let qualityMode = 'high';
 try {
@@ -531,7 +578,6 @@ function buildWalls(offset){
   for(let i=0;i<TRACK_SAMPLES;i++){ const a0=i*2,a1=i*2+1,b0=((i+1)%TRACK_SAMPLES)*2,b1=((i+1)%TRACK_SAMPLES)*2+1; idx.push(a0,b0,a1, a1,b0,b1); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeVertexNormals(); return g;
 }
-buildTrack(currentTrackIdx);
 function switchTrack(idx){
   buildTrack(idx);
   try { settings = saveSettings({ track: currentTrackIdx }); } catch {}
@@ -559,7 +605,7 @@ function grantXP(amount){
   return r;
 }
 function refreshEconHUD(){
-  if(moneyValEl) moneyValEl.textContent = profile.money;
+  if(coinsValEl) coinsValEl.textContent = profile.coins;
   if(gemsValEl) gemsValEl.textContent = profile.gems;
   if(xpValEl) xpValEl.textContent = profile.xp;
   if(levelBadgeEl){
@@ -570,14 +616,14 @@ function refreshEconHUD(){
   }
   persistProfile();
 }
-function popMoney(text, cls=''){
-  if(!moneyPopEl) return;
-  const d=document.createElement('div'); d.className='pop '+cls; d.textContent=text; moneyPopEl.appendChild(d);
+function popCoins(text, cls=''){
+  if(!coinsPopEl) return;
+  const d=document.createElement('div'); d.className='pop '+cls; d.textContent=text; coinsPopEl.appendChild(d);
   setTimeout(()=>d.remove(), 900);
 }
-let moneyTokens=[]; // economy token state
-let moneyTokenMeshes=[];
-let moneyTokenId=0;
+let coinsTokens=[]; // economy token state
+let coinsTokenMeshes=[];
+let coinsTokenId=0;
 refreshEconHUD();
 
 // ---------- PHASE 3 — offline-first boot, PWA, settings ----------
@@ -601,7 +647,7 @@ async function renderHistory(){
     historyList.innerHTML = list.map((m) => {
       const d = new Date(m.date).toLocaleDateString();
       const suf = m.rank===1?'ST':m.rank===2?'ND':m.rank===3?'RD':'TH';
-      return `<div>P${m.rank}${suf} • ${m.kills||0} kills • +$${m.moneyBonus||0} +${m.xpGain||0}XP • ${d}</div>`;
+      return `<div>P${m.rank}${suf} • ${m.kills||0} kills • +$${m.coinsBonus||0} +${m.xpGain||0}XP • ${d}</div>`;
     }).join('');
   } catch { historyList.textContent = 'History unavailable.'; }
 }
@@ -609,7 +655,7 @@ async function renderHistory(){
 (async () => {
   try {
     const unified = await loadProfileUnified();
-    if (unified && (unified.money !== profile.money || unified.xp !== profile.xp || unified.gems !== profile.gems || unified.equippedSkin !== profile.equippedSkin)) {
+    if (unified && (unified.coins !== profile.coins || unified.xp !== profile.xp || unified.gems !== profile.gems || unified.equippedSkin !== profile.equippedSkin)) {
       profile = unified;
       migrateShop(profile);
       refreshEconHUD();
@@ -669,7 +715,7 @@ if (flushSyncBtn) flushSyncBtn.addEventListener('click', async () => {
   refreshSyncInfo();
 });
 if (resetProgressBtn) resetProgressBtn.addEventListener('click', async () => {
-  if (!confirm('Reset money, gems, XP and skins?')) return;
+  if (!confirm('Reset coins, gems, XP and skins?')) return;
   profile = createDefaultProfile();
   persistProfile(true);
   refreshEconHUD();
@@ -681,6 +727,15 @@ const projectiles=[]; // shared projectile sim
 const pickups=[]; // pickup states
 const effects=[]; // {pos, vel, life, mesh, scale}
 let shake=0;
+// ---- shared world state, declared EARLY so every init fn (buildTrack/placeCars/
+// spawnPickups/spawnRoadblocks) can run in any order without TDZ/undefined crashes
+// (PHASE 16 phone-fix: these were previously declared mid-file; top-level init
+// calls hit them before initialization -> static dead page on phone) ----
+const pickupMeshes=[];
+const projectileMeshes=[];
+let shortcutSegs=[]; // {ax,az,bx,bz,w,claimed} Phase 10
+let hazards=[];      // {type,x,z,r}
+let ramps=[];        // {x,z,yaw}
 
 // ---------- PHASE 9 — procedural vehicle generator ----------
 // Original designs, no logos or real names. Builders are per-class; every
@@ -917,8 +972,8 @@ function placeCars(){
     c.shieldMesh.visible=false; c.smoke.material.opacity=0;
   });
   projectiles.length=0; projectileMeshes.forEach(m=>scene.remove(m)); projectileMeshes.length=0;
-  moneyTokens.forEach(t=>{ const mm=moneyTokenMeshes[moneyTokens.indexOf(t)]; if(mm) scene.remove(mm); });
-  moneyTokens.length=0; moneyTokenMeshes.forEach(m=>scene.remove(m)); moneyTokenMeshes.length=0;
+  coinsTokens.forEach(t=>{ const mm=coinsTokenMeshes[coinsTokens.indexOf(t)]; if(mm) scene.remove(mm); });
+  coinsTokens.length=0; coinsTokenMeshes.forEach(m=>scene.remove(m)); coinsTokenMeshes.length=0;
   effects.forEach(e=>scene.remove(e.mesh)); effects.length=0;
   // reapply skin if changed
   if(player && profile.equippedSkin){
@@ -926,7 +981,6 @@ function placeCars(){
     if(skin) player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color);
   }
 }
-placeCars();
 
 // ---------- PHASE 4 — online multiplayer (solo bots stay as practice forever) ----------
 const onlineBtn = document.getElementById('onlineBtn');
@@ -1000,21 +1054,64 @@ if (chatRow && !chatRow.children.length) {
     chatRow.appendChild(b);
   });
 }
+// ---------- PHASE 16 connection states: connecting / waking (60s countdown) / failed ----------
+const connOverlay = document.getElementById('connOverlay');
+const connTitle = document.getElementById('connTitle');
+const connSub = document.getElementById('connSub');
+const connCount = document.getElementById('connCount');
+const connSpin = document.getElementById('connSpin');
+const connRetryBtn = document.getElementById('connRetryBtn');
+let connTimer = null;
+function showConnState(state, detail){
+  if (!connOverlay) return;
+  connOverlay.classList.add('show');
+  if (connRetryBtn) connRetryBtn.style.display = state === 'failed' ? 'block' : 'none';
+  if (connSpin) connSpin.style.display = state === 'failed' ? 'none' : 'block';
+  if (state === 'connecting') { connTitle.textContent = 'CONNECTING'; connSub.textContent = detail || 'Finding the fastest server…'; connCount.textContent = ''; }
+  if (state === 'waking') { connTitle.textContent = 'SERVER WAKING UP'; connSub.textContent = 'Free server spins down when idle — first load takes up to a minute.'; }
+  if (state === 'failed') { connTitle.textContent = 'CONNECTION FAILED'; connSub.textContent = detail || 'Could not reach the server. Check your internet and retry.'; connCount.textContent = ''; }
+  if (state === 'hide') connOverlay.classList.remove('show');
+}
+function startWakeCountdown(seconds = 60){
+  stopWakeCountdown();
+  const t0 = Date.now();
+  connTimer = setInterval(()=>{
+    const left = Math.max(0, seconds - Math.floor((Date.now() - t0) / 1000));
+    if (connCount) connCount.textContent = left + 's';
+    if (left <= 0) stopWakeCountdown();
+  }, 250);
+}
+function stopWakeCountdown(){ if (connTimer) { clearInterval(connTimer); connTimer = null; } if (connCount) connCount.textContent = ''; }
+if (connRetryBtn) connRetryBtn.addEventListener('click', ()=>{ showConnState('connecting'); connectNet(lobbyMode || 'quick'); });
+
 async function ensureConnected() {
   if (net && net.connected) return true;
   const url = resolveServerURL();
+  const t0 = Date.now();
+  showConnState('connecting', url.replace(/^wss?:\/\//, ''));
   if (netStatus) netStatus.textContent = 'Connecting…';
   try {
     if (net) { try { net.disconnect(); } catch {} }
     net = new NetClient();
     wireNet(net);
-    await net.connect(url);
+    // Free-tier hosts (Render) sleep: if the first attempt takes >4s, switch to
+    // the 'server waking up' state with a 60s countdown instead of a dead screen.
+    const slowTimer = setTimeout(()=>{ if (!(net && net.connected)) { showConnState('waking'); startWakeCountdown(60); } }, 4000);
+    try {
+      await net.connect(url);
+    } finally {
+      clearTimeout(slowTimer);
+    }
+    stopWakeCountdown();
+    showConnState('hide');
     rememberServerURL(url);
     net.hello('', profile.equippedSkin || 'default', getAccountId());
     await new Promise((r) => setTimeout(r, 250));
     return true;
   } catch (e) {
-    if (netStatus) netStatus.textContent = 'Connect failed: ' + (e.message || e) + ' — retry.';
+    stopWakeCountdown();
+    showConnState('failed', `${url.replace(/^wss?:\/\//, '')} — ${(e && e.message) || 'unreachable'}`);
+    if (netStatus) netStatus.textContent = 'Connect failed — retry.';
     setOnlineMode(false);
     return false;
   }
@@ -1079,11 +1176,11 @@ function wireNet(n) {
       const tagVal = document.getElementById('tagVal');
       if (tagVal) tagVal.textContent = m.tag;
     }
-    if (typeof m.money === 'number') profile.money = m.money;
+    if (typeof m.coins === 'number') profile.coins = m.coins;
     if (typeof m.gems === 'number') profile.gems = m.gems;
     if (typeof m.xp === 'number' && m.xp > profile.xp) profile.xp = m.xp;
     refreshEconHUD();
-    if (netStatus && n.roomCode) netStatus.textContent = `Room ${n.roomCode} — server wallet $${m.money} · ${m.xp}XP`;
+    if (netStatus && n.roomCode) netStatus.textContent = `Room ${n.roomCode} — server wallet $${m.coins} · ${m.xp}XP`;
     // Phase 9: server inventory (shop-confirmed) merges into local profile
     if (m.inventory) {
       migrateShop(profile);
@@ -1098,26 +1195,26 @@ function wireNet(n) {
   // Phase 9: server purchase verdicts
   n.onBuy = (m) => {
     pendingBuy = null;
-    if (!m.ok) { popMoney(`SHOP: ${m.reason || 'denied'}`,''); renderGarage(); return; }
+    if (!m.ok) { popCoins(`SHOP: ${m.reason || 'denied'}`,''); renderGarage(); return; }
     const fn = m.kind === 'vehicle' ? () => buyVehicle(profile, m.item, { server: true })
       : m.kind === 'weapon' ? () => buyWeapon(profile, m.item, { server: true })
       : () => buyUpgrade(profile, m.vehicle, m.item, { server: true });
     const r = fn();
-    if (typeof m.money === 'number') profile.money = m.money;
+    if (typeof m.coins === 'number') profile.coins = m.coins;
     if (typeof m.gems === 'number') profile.gems = m.gems;
     if (m.kind === 'vehicle' && r.ok) { equipVehicle(profile, m.item); setPlayerVehicle(m.item); }
     if (m.kind === 'upgrade' && r.ok) applyVehicleStats(player, true);
     refreshEconHUD(); persistProfile(true); renderGarage();
     sfx('pickup');
-    popMoney(r.ok ? 'PURCHASED ✓' : `SHOP: ${r.reason}`,'xp');
+    popCoins(r.ok ? 'PURCHASED ✓' : `SHOP: ${r.reason}`,'xp');
   };
   // Phase 12: server-owned revive verdict (gems deducted server-side).
   n.onReviveOk = (m) => {
     pendingRevive = false;
-    if(!m.ok){ popMoney(`REVIVE: ${m.reason || 'denied'}`,''); showReviveOverlay(); return; }
+    if(!m.ok){ popCoins(`REVIVE: ${m.reason || 'denied'}`,''); showReviveOverlay(); return; }
     if(typeof m.gems === 'number') profile.gems = m.gems;
     refreshEconHUD(); persistProfile(true);
-    popMoney(`-${m.cost} 💎 (server)`,'gem');
+    popCoins(`-${m.cost} 💎 (server)`,'gem');
     applyPlayerRevive();
   };
   // Phase 13 race start: countdown, then local grid sized by the server.
@@ -1138,13 +1235,17 @@ function wireNet(n) {
         restart();
         setBotCount(bots);
         startGame();
-        popMoney(`${humans}V${bots}B — RACE!`, 'xp');
+        popCoins(`${humans}V${bots}B — RACE!`, 'xp');
       }
     };
     tick();
   };
   // Phase 13: mid-race drops pause the game and return to the lobby.
   n.onDisconnect = () => {
+    // PHASE 16 fix: a failed connect used to land here and setOnlineMode(false)
+    // instantly cleared the connection overlay — hiding CONNECTING/WAKING/FAILED.
+    // Only treat as a mid-race drop when a race had actually started.
+    if (connOverlay && connOverlay.classList.contains('show')) return; // a conn state screen owns the UI
     if (!started || finished) { setOnlineMode(false); return; }
     paused = true;
     window.__dropLobby = true;
@@ -1155,11 +1256,11 @@ function wireNet(n) {
   };
   n.onAward = (m) => {
     // Server is the only minter: apply its award to the local wallet mirror.
-    if (typeof m.money === 'number' && m.money > 0) { addMoney(profile, m.money); popMoney(`+$${m.money} (${m.reason})`); }
+    if (typeof m.coins === 'number' && m.coins > 0) { addCoins(profile, m.coins); popCoins(`+$${m.coins} (${m.reason})`); }
     if (typeof m.xp === 'number' && m.xp > 0) {
       const r = grantXP(m.xp);
-      popMoney(`+${m.xp} XP (${m.reason})`, 'xp');
-      if (r.levelUp) popMoney(`LEVEL ${r.after}!`, 'xp');
+      popCoins(`+${m.xp} XP (${m.reason})`, 'xp');
+      if (r.levelUp) popCoins(`LEVEL ${r.after}!`, 'xp');
     }
     refreshEconHUD(); persistProfile(true);
     supabaseSync(profile);
@@ -1224,8 +1325,8 @@ const startBtn = document.getElementById('startBtn');
 function showLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = ''; }
 function hideLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = 'none'; }
 if (copyInviteBtn) copyInviteBtn.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(inviteLink.textContent); popMoney('LINK COPIED', 'xp'); }
-  catch { popMoney(inviteLink.textContent, ''); }
+  try { await navigator.clipboard.writeText(inviteLink.textContent); popCoins('LINK COPIED', 'xp'); }
+  catch { popCoins(inviteLink.textContent, ''); }
 });
 if (startBtn) startBtn.addEventListener('click', () => {
   if (!net || !isHost) return;
@@ -1264,7 +1365,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
     if (!syncCodeEl || !syncCodeEl.value.trim()) return;
     profile = importSyncCode(syncCodeEl.value);
     refreshEconHUD(); persistProfile(true); renderGarage();
-  } catch { popMoney('BAD SYNC CODE'); }
+  } catch { popCoins('BAD SYNC CODE'); }
 });
 // Phase 6 live-ops UI: tracks, daily, season.
 const trackRow = document.getElementById('trackRow');
@@ -1298,10 +1399,10 @@ function renderLiveops() {
 }
 if (claimSeasonBtn) claimSeasonBtn.addEventListener('click', () => {
   const s = seasonProgress(profile);
-  if (!s.next) { popMoney('SEASON COMPLETE'); return; }
+  if (!s.next) { popCoins('SEASON COMPLETE'); return; }
   const r = claimSeasonReward(profile, s.next.points);
-  if (r.ok) { refreshEconHUD(); persistProfile(true); popMoney(`+${r.gems} 💎 ${r.label}`, 'gem'); renderLiveops(); }
-  else popMoney('NOT ENOUGH PTS');
+  if (r.ok) { refreshEconHUD(); persistProfile(true); popCoins(`+${r.gems} 💎 ${r.label}`, 'gem'); renderLiveops(); }
+  else popCoins('NOT ENOUGH PTS');
 });
 setInterval(() => {
   if (netMode !== 'online' || !net || !net.online || !started || paused || finished) return;
@@ -1356,7 +1457,7 @@ function reconcilePlayer() {
     }
   } catch {}
 }
-const pickupMeshes=[];
+// (pickupMeshes moved to top of file)
 // Phase 8: pickups are bonus extras — weapons plus fuel/ammo. Weapons still expire.
 function pickupColor(type){
   if(WEAPON_DEFS[type]) return WEAPON_DEFS[type].color;
@@ -1415,7 +1516,6 @@ function spawnPickups(){
   }
   addShortcutCachePickups(); // Phase 10: hidden caches on secret cuts
 }
-spawnPickups();
 
 // ---------- PHASE 8 — roadblocks (destructible / steer-around / heavy) ----------
 const blocks=[];
@@ -1511,7 +1611,7 @@ function tickHazards(dt){
       const dx=c.pos.x-h.x, dz=c.pos.z-h.z;
       if(dx*dx+dz*dz > h.r*h.r) continue;
       if(h.type==='oil'){
-        if(c.oilT<=0 && c.isPlayer) popMoney('OIL SLICK!', '');
+        if(c.oilT<=0 && c.isPlayer) popCoins('OIL SLICK!', '');
         c.oilT=HAZARD_TUNING.oil.effectTime;
       } else {
         const res=applyDamage(c.cstate, HAZARD_TUNING.debris.dps*dt, null, gameTime);
@@ -1526,19 +1626,16 @@ function tickHazards(dt){
         const dx=c.pos.x-r.x, dz=c.pos.z-r.z;
         if(dx*dx+dz*dz < 3.4*3.4){
           c.vy=RAMP_VY; c.airborne=true; c.rampCd=1.2;
-          if(c.isPlayer){ sfx('jump'); popMoney('RAMP!', 'xp'); }
+          if(c.isPlayer){ sfx('jump'); popCoins('RAMP!', 'xp'); }
           break;
         }
       }
     }
   }
 }
-spawnRoadblocks();
 
 // ---------- PHASE 10 — shortcuts, hazards, ramps ----------
-let shortcutSegs = []; // {ax,az,bx,bz,w,claimed}
-let hazards = [];      // {type,x,z,r}
-let ramps = [];        // {x,z,yaw}
+// (state moved to top of file: shortcutSegs / hazards / ramps)
 function segDist2(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
   const L2 = dx * dx + dz * dz || 1;
@@ -1702,7 +1799,7 @@ if(likeBtn) likeBtn.addEventListener('click', (e)=>{
   if(!likeTarget) return;
   sendBannerEvent('like', likeTarget.id);
   likeTarget.likeCd = 60;
-  popMoney(`♥ ${likeTarget.name} LIKED!`, 'xp'); sfx('ui');
+  popCoins(`♥ ${likeTarget.name} LIKED!`, 'xp'); sfx('ui');
   likeTarget = null; updateLikeBtn();
 });
 function placeholderBoard(name, color, big) {
@@ -1823,7 +1920,7 @@ function tickBanners(dt) {
       sendBannerEvent('bump', p.id);
       spawnHitSpark(player.pos);
       player.vel.multiplyScalar(0.9);
-      if (player.isPlayer) popMoney(`BUMP! ${p.name}`, 'xp');
+      if (player.isPlayer) popCoins(`BUMP! ${p.name}`, 'xp');
     }
     if (d < bestD && p.likeCd <= 0 && !player.out) { bestD = d; likeTarget = p; }
   }
@@ -1831,8 +1928,8 @@ function tickBanners(dt) {
 }
 
 // ---------- PROJECTILES ----------
-const projectileMeshes=[];
-function makeMoneyTokenMesh(amount){
+// (projectileMeshes moved to top of file)
+function makeCoinTokenMesh(amount){
   const g=new THREE.Group();
   const coin=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,0.16,14), new THREE.MeshLambertMaterial({color:0xffd700}));
   coin.rotation.x=Math.PI/2; g.add(coin);
@@ -1842,26 +1939,26 @@ function makeMoneyTokenMesh(amount){
   g.userData.amount=amount;
   return g;
 }
-function spawnMoneyTokens(pos){
+function spawnCoinsTokens(pos){
   for(let i=0;i<TOKENS_PER_KILL;i++){
     const ang=(i/TOKENS_PER_KILL)*Math.PI*2 + Math.random()*0.4;
     const rad=1.1 + Math.random()*2.2;
     const p={x: pos.x + Math.cos(ang)*rad, y:0.18, z: pos.z + Math.sin(ang)*rad};
-    const tok=createMoneyToken('mt'+(moneyTokenId++), p, MONEY_PER_KILL_TOKEN);
+    const tok=createCoinToken('mt'+(coinsTokenId++), p, COINS_PER_KILL_TOKEN);
     // scatter a bit on ground
-    moneyTokens.push(tok);
-    const mesh=makeMoneyTokenMesh(tok.amount); mesh.position.set(p.x, 0.35, p.z); scene.add(mesh); moneyTokenMeshes.push(mesh);
+    coinsTokens.push(tok);
+    const mesh=makeCoinTokenMesh(tok.amount); mesh.position.set(p.x, 0.35, p.z); scene.add(mesh); coinsTokenMeshes.push(mesh);
   }
 }
-function tickMoneyTokens(dt){
-  for(let i=moneyTokens.length-1;i>=0;i--){
-    const t=moneyTokens[i], m=moneyTokenMeshes[i];
-    if(!t.alive){ scene.remove(m); moneyTokens.splice(i,1); moneyTokenMeshes.splice(i,1); continue; }
+function tickCoinsTokens(dt){
+  for(let i=coinsTokens.length-1;i>=0;i--){
+    const t=coinsTokens[i], m=coinsTokenMeshes[i];
+    if(!t.alive){ scene.remove(m); coinsTokens.splice(i,1); coinsTokenMeshes.splice(i,1); continue; }
     t.life-=dt; t.bob+=dt*2.2;
     if(t.life<=0){
       // blink then remove
       if(t.life > -0.9) m.visible = Math.floor(gameTime*10)%2===0;
-      else { scene.remove(m); moneyTokens.splice(i,1); moneyTokenMeshes.splice(i,1); continue; }
+      else { scene.remove(m); coinsTokens.splice(i,1); coinsTokenMeshes.splice(i,1); continue; }
     } else {
       m.position.y = 0.35 + Math.sin(t.bob)*0.18;
       m.rotation.y += dt*1.8;
@@ -1875,7 +1972,7 @@ function tickMoneyTokens(dt){
         t.alive=false;
         if(c.isPlayer){
           // Phase 13: no local wallet — server mints token cash (AWARD reply).
-          if(isOnline() && net) { try{ net.sendToken(t.amount); }catch{} popMoney(`+$${t.amount} (server)`); }
+          if(isOnline() && net) { try{ net.sendToken(t.amount); }catch{} popCoins(`+$${t.amount} (server)`); }
           // small xp? token not but we keep 0
         } else {
           // bot just removes token (steals) — no economy
@@ -2036,9 +2133,9 @@ addEventListener('keydown',e=>{
 // Phase 9: tap weapon card to switch mount slot (touch-friendly)
 function cyclePlayerMount(){
   if(!started || paused || finished || player.out || spectating) return;
-  if(!player.cstate.mounts || player.cstate.mounts.length<2){ popMoney('ONE SLOT — 2-slot rides hold more',''); return; }
+  if(!player.cstate.mounts || player.cstate.mounts.length<2){ popCoins('ONE SLOT — 2-slot rides hold more',''); return; }
   const m = cycleMount(player.cstate);
-  if(m){ const def = WEAPON_DEFS[m.type]; popMoney(`${def.icon} ${def.label} [${player.cstate.mountIdx+1}/${player.cstate.mounts.length}]`,'xp'); sfx('ui'); }
+  if(m){ const def = WEAPON_DEFS[m.type]; popCoins(`${def.icon} ${def.label} [${player.cstate.mountIdx+1}/${player.cstate.mounts.length}]`,'xp'); sfx('ui'); }
 }
 if(weaponHUD){ weaponHUD.style.pointerEvents='auto'; weaponHUD.style.cursor='pointer'; weaponHUD.title='Tap to switch weapon mount'; weaponHUD.addEventListener('click', cyclePlayerMount); }
 if (jumpBtn) { ['touchstart','mousedown'].forEach(ev=> jumpBtn.addEventListener(ev,e=>{ e.preventDefault(); tryPlayerJump(); })); }
@@ -2114,7 +2211,17 @@ document.getElementById('restartBtn').addEventListener('click',()=>{
   }
   restart(); paused=false; pauseOverlay.classList.remove('show');
 });
-canvas.addEventListener('click',()=>{ if(!started && !isOnline()) { openOnline(); connectNet('quick'); } });
+let firstTapDone = false;
+// PHASE 16 fix: the 'TAP TO CONNECT' title sits ON TOP of the canvas (pointer-events:auto),
+// so a canvas-only click handler never fired on phone = dead screen. One document-level
+// handler now: first tap = fullscreen+landscape; tap outside any panel = connect & quick match.
+document.addEventListener('click', (e) => {
+  if (!firstTapDone) { firstTapDone = true; tryFullscreenLandscape(); }
+  if (started || isOnline()) return;
+  if (e.target.closest && e.target.closest('button, input, select, a, #onlineOverlay, #settingsOverlay, #garageOverlay, #pauseOverlay, #connOverlay, #rotatePrompt, #reviveOverlay, #outOverlay, .card')) return;
+  openOnline();
+  connectNet('quick');
+});
 function startGame(){ started=true; centerMsg.style.display='none'; try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
 function restart(){
   placeCars(); spawnPickups(); resetRoadblocks(); for(const s of shortcutSegs) s.claimed=false; bannerViewed.clear(); if(likeBtn) likeBtn.classList.remove('show'); finished=false; started=true; gameTime=0; shake=0; hitFlashTimer=0; hideReviveOverlay(); hideOutOverlay();
@@ -2312,8 +2419,8 @@ function updateCar(c, dt, isPlayerCar){
   const cut=inShortcut(c.pos.x, c.pos.z, 0);
   if(cut && isPlayerCar && !cut.claimed){
     cut.claimed=true;
-    if(!isOnline()){ addMoney(profile, SHORTCUT_BONUS); refreshEconHUD(); }
-    popMoney(`SECRET CUT! +$${SHORTCUT_BONUS}`,'xp'); sfx('pickup');
+    if(!isOnline()){ addCoins(profile, SHORTCUT_BONUS); refreshEconHUD(); }
+    popCoins(`SECRET CUT! +$${SHORTCUT_BONUS}`,'xp'); sfx('pickup');
   }
   if(distFromCenter>half-1.1 && !cut){
     const centerPt=sampled[near.idx], toCar=new THREE.Vector3().subVectors(c.pos, centerPt);
@@ -2349,7 +2456,7 @@ function updateCar(c, dt, isPlayerCar){
     if(res.killed) onCarWrecked(c);
     else if(!res.blocked){ spawnHitSpark(c.pos); if(isPlayerCar) triggerHitFlash(false); }
     if(def.destructible) damageBlock(b, bi, Math.max(BLOCK_RAM_DMG*0.7, speedAbs*0.9));
-    else if(isPlayerCar) popMoney('STEER AROUND!', '');
+    else if(isPlayerCar) popCoins('STEER AROUND!', '');
     shake=Math.min(1.2, shake+0.3);
     break; // one block per tick max
   }
@@ -2375,7 +2482,7 @@ function updateCar(c, dt, isPlayerCar){
         c.lap++;
         c.fuel=Math.min(c.fuelMax||FUEL_MAX, c.fuel + FUEL_PER_LAP);
         if(c.isPlayer){
-          popMoney(`+${FUEL_PER_LAP} FUEL — LAP ${c.lap+1}`,'xp');
+          popCoins(`+${FUEL_PER_LAP} FUEL — LAP ${c.lap+1}`,'xp');
           if(c.lap>=TOTAL_LAPS && !finished){ const order=rankCars(); const rank=order.indexOf(c)+1; showFinish(rank); }
         }
       }
@@ -2405,8 +2512,8 @@ function updateCar(c, dt, isPlayerCar){
 function onCarWrecked(car){
   spawnExplosion(car.pos, car.isPlayer?0xff2222:0xff6a00, 1.35, 18);
   triggerHitFlash(car.isPlayer);
-  // drop money tokens where wrecked
-  spawnMoneyTokens(car.pos);
+  // drop coins tokens where wrecked
+  spawnCoinsTokens(car.pos);
   // kill feed + XP
   const killerId=car.cstate.lastAttacker;
   if(killerId!=null && killerId!==car.idx){
@@ -2417,8 +2524,8 @@ function onCarWrecked(car){
     if(killer && killer.isPlayer){
       const online = (typeof netMode!=='undefined' && netMode==='online');
       if(!online){
-        const r=grantXP(XP_REWARDS.kill); refreshEconHUD(); popMoney(`+${XP_REWARDS.kill} XP`,'xp');
-        if(r.levelUp){ popMoney(`LEVEL UP ${r.after}!`,'xp'); spawnExplosion(killer.pos, 0x2de2ff, 0.8, 8); }
+        const r=grantXP(XP_REWARDS.kill); refreshEconHUD(); popCoins(`+${XP_REWARDS.kill} XP`,'xp');
+        if(r.levelUp){ popCoins(`LEVEL UP ${r.after}!`,'xp'); spawnExplosion(killer.pos, 0x2de2ff, 0.8, 8); }
       }
       profile.stats.kills=(profile.stats.kills||0)+1; saveProfile(profile);
     }
@@ -2496,7 +2603,7 @@ function tickProjectiles(dt){
         if(p.empTime && !c.cstate.wrecked){
           c.cstate.disabled=Math.max(c.cstate.disabled, p.empTime);
           const zap=new THREE.Mesh(new THREE.RingGeometry(0.5,1.0,14), new THREE.MeshBasicMaterial({color:0xffe14d, transparent:true, opacity:0.9, side:THREE.DoubleSide})); zap.rotation.x=-Math.PI/2; zap.position.set(c.pos.x,0.1,c.pos.z); scene.add(zap); effects.push({mesh:zap, vel:new THREE.Vector3(), life:0.5, maxLife:0.5, kind:'ring', scale:1.4});
-          if(c.isPlayer) popMoney('⚡ EMP ZAPPED!', '');
+          if(c.isPlayer) popCoins('⚡ EMP ZAPPED!', '');
         }
         if(p.splash){
           for(const t of cars){
@@ -2548,7 +2655,7 @@ function tickProjectiles(dt){
           else {
             const broke=damageBlock(b, bi, p.damage);
             spawnHitSpark(new THREE.Vector3(p.pos.x,0.6,p.pos.z));
-            if(broke && p.ownerId===player.idx) popMoney('CLEARED!', 'xp');
+            if(broke && p.ownerId===player.idx) popCoins('CLEARED!', 'xp');
           }
           if(p.type==='rocket') spawnExplosion(p.pos, WEAPON_DEFS.rocket.color, 0.8, 8);
           blockHit=true; break;
@@ -2590,10 +2697,10 @@ function tickPickups(dt){
       if(d<3.3){
         if(p.type==='fuel'){
           c.fuel=Math.min(c.fuelMax || FUEL_MAX, c.fuel + FUEL_PICKUP);
-          if(c.isPlayer){ spawnHitSpark(c.pos); popMoney(`+${FUEL_PICKUP} FUEL`); sfx('pickup'); }
+          if(c.isPlayer){ spawnHitSpark(c.pos); popCoins(`+${FUEL_PICKUP} FUEL`); sfx('pickup'); }
         } else if(p.type==='ammo'){
           refillMountsPickup(c.cstate);
-          if(c.isPlayer){ spawnHitSpark(c.pos); popMoney(`+AMMO`,'xp'); sfx('pickup'); }
+          if(c.isPlayer){ spawnHitSpark(c.pos); popCoins(`+AMMO`,'xp'); sfx('pickup'); }
         } else {
           giveWeapon(c.cstate, p.type);
           if(c.isPlayer){ spawnHitSpark(c.pos); sfx('pickup'); }
@@ -2632,7 +2739,7 @@ function goOutOfFuel(c){
   if(c.out) return;
   c.out=true; c.outReason='fuel'; c.vel.set(0,0,0);
   spawnExplosion(c.pos, 0x555555, 0.7, 6);
-  if(c.isPlayer){ popMoney('OUT OF FUEL!', ''); showOutOverlay('fuel'); }
+  if(c.isPlayer){ popCoins('OUT OF FUEL!', ''); showOutOverlay('fuel'); }
 }
 function showOutOverlay(reason){
   hideReviveOverlay();
@@ -2649,7 +2756,7 @@ function startSpectate(){
   hideOutOverlay();
   spectating=true; paused=false;
   if(spectateBadge) spectateBadge.classList.add('show');
-  popMoney('SPECTATING LEADER', 'xp');
+  popCoins('SPECTATING LEADER', 'xp');
 }
 const spectateBtnEl = document.getElementById('spectateBtn');
 if(spectateBtnEl) spectateBtnEl.addEventListener('click', startSpectate);
@@ -2671,7 +2778,7 @@ function doPlayerRevive(){
   }
   const res=payRevive(profile, cs.revivesUsed);
   if(!res.ok) return;
-  refreshEconHUD(); popMoney(`-${res.cost} 💎`,'gem');
+  refreshEconHUD(); popCoins(`-${res.cost} 💎`,'gem');
   applyPlayerRevive();
 }
 function applyPlayerRevive(){
@@ -2725,16 +2832,16 @@ function setPlayerVehicle(vid){
 }
 // Unified shop purchase: solo = local check+charge; online = server decides (BUY_OK).
 function shopBuy(kind, item, level, vehicle, applyLocal){
-  if(pendingBuy){ popMoney('WAIT FOR SHOP…',''); return; }
+  if(pendingBuy){ popCoins('WAIT FOR SHOP…',''); return; }
   if(isOnline()){
     pendingBuy = { kind, item };
-    try{ net.sendBuy(kind, item, level | 0, vehicle); popMoney('SHOP: CHECKING…','xp'); }catch{ pendingBuy=null; }
+    try{ net.sendBuy(kind, item, level | 0, vehicle); popCoins('SHOP: CHECKING…','xp'); }catch{ pendingBuy=null; }
     renderGarage();
     return;
   }
   const r = applyLocal();
-  if(r.ok){ refreshEconHUD(); persistProfile(true); sfx('pickup'); popMoney('PURCHASED ✓','xp'); }
-  else popMoney(`SHOP: ${r.reason==='funds'?'NEED FUNDS':'UNAVAILABLE'}`,'');
+  if(r.ok){ refreshEconHUD(); persistProfile(true); sfx('pickup'); popCoins('PURCHASED ✓','xp'); }
+  else popCoins(`SHOP: ${r.reason==='funds'?'NEED FUNDS':'UNAVAILABLE'}`,'');
   renderGarage();
 }
 function statBar(label, val, max){
@@ -2776,7 +2883,7 @@ function renderGarage(){
       div.innerHTML=`<div class="sw" style="background:${hex}"></div><b>${skin.name}</b><div style="font-size:10px;opacity:.6">${skin.price===0?'FREE':skin.price+' 💰'}</div>`;
       if(equipped){ btn(div,'EQUIPPED','equip',true); }
       else if(owned){ btn(div,'EQUIP','equip',false,()=>{ const r=equipSkin(profile, skin.id); if(r.ok){ refreshEconHUD(); persistProfile(true); renderGarage(); player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); player.color=skin.color; } }); }
-      else { btn(div, skin.price>profile.money? `NEED $${skin.price}` : `BUY $${skin.price}`,'buy',profile.money<skin.price,()=>{ const r=buySkin(profile, skin.id); if(r.ok){ equipSkin(profile, skin.id); refreshEconHUD(); persistProfile(true); popMoney(`BOUGHT ${skin.name}`); renderGarage(); player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); } else { popMoney('NOT ENOUGH CASH'); } }); }
+      else { btn(div, skin.price>profile.coins? `NEED $${skin.price}` : `BUY $${skin.price}`,'buy',profile.coins<skin.price,()=>{ const r=buySkin(profile, skin.id); if(r.ok){ equipSkin(profile, skin.id); refreshEconHUD(); persistProfile(true); popCoins(`BOUGHT ${skin.name}`); renderGarage(); player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); } else { popCoins('NOT ENOUGH CASH'); } }); }
       body.appendChild(div);
     });
     body.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px';
@@ -2792,7 +2899,7 @@ function renderGarage(){
           + statBar('TOP', st.top, 50) + statBar('ACC', st.accel, 1.4) + statBar('HND', st.handling, 1.5) + statBar('HP', st.hp, 260) + statBar('FUEL', st.fuel, 120)
           + `<div style="font-size:10px;opacity:.7;margin-top:4px">SLOTS ${st.slots} • ${priceText(v)}</div>`;
         if(equipped) btn(div,'EQUIPPED','equip',true);
-        else if(owned) btn(div,'SELECT','equip',false,()=>{ if(setPlayerVehicle(v.id)){ popMoney(v.name+' READY','xp'); renderGarage(); } });
+        else if(owned) btn(div,'SELECT','equip',false,()=>{ if(setPlayerVehicle(v.id)){ popCoins(v.name+' READY','xp'); renderGarage(); } });
         else btn(div, isOnline()&&pendingBuy?'…':priceText(v),'buy',!!pendingBuy,()=>shopBuy('vehicle', v.id, 0, undefined, ()=>{ const r=buyVehicle(profile, v.id); if(r.ok){ equipVehicle(profile, v.id); setPlayerVehicle(v.id);} return r; }));
         body.appendChild(div);
       }
@@ -2851,9 +2958,9 @@ function showFinish(rank){
   hideReviveOverlay();
   // rewards — Phase 13: server is the only minter (AWARD msg). No local wallet.
   const xpGain = XP_REWARDS.finish[Math.min(rank-1, XP_REWARDS.finish.length-1)] || 10;
-  const moneyBonus = rank===1? 48 : rank===2? 28 : rank===3? 14 : 6;
+  const coinsBonus = rank===1? 48 : rank===2? 28 : rank===3? 14 : 6;
   const playerKills = (player && player.cstate && player.cstate.kills) || profile.stats.kills || 0;
-  const moneyBefore = profile.stats.moneyCollected || 0;
+  const coinsBefore = profile.stats.coinsCollected || 0;
   let r = { levelUp: false };
   try { if(net) net.sendFinish(rank); } catch {}
   profile.stats.races=(profile.stats.races||0)+1;
@@ -2862,21 +2969,21 @@ function showFinish(rank){
   saveProfile(profile); refreshEconHUD(); persistProfile(true);
   // Phase 3: match history (IndexedDB) + backend-shaped sync op.
   try {
-    recordMatch({ rank, laps: TOTAL_LAPS, kills: playerKills, moneyBonus, xpGain, moneyCollected: (profile.stats.moneyCollected||0) - moneyBefore, durationSec: Math.round(gameTime) });
+    recordMatch({ rank, laps: TOTAL_LAPS, kills: playerKills, coinsBonus, xpGain, coinsCollected: (profile.stats.coinsCollected||0) - coinsBefore, durationSec: Math.round(gameTime) });
     settings = saveSettings({ lastPlayedAt: Date.now() });
     renderHistory(); refreshSyncInfo();
   } catch {}
-  popMoney(`+${xpGain} XP`,'xp'); popMoney(`+$${moneyBonus}`,'');
-  if(r.levelUp) popMoney(`LEVEL ${r.after}!`,'xp');
+  popCoins(`+${xpGain} XP`,'xp'); popCoins(`+$${coinsBonus}`,'');
+  if(r.levelUp) popCoins(`LEVEL ${r.after}!`,'xp');
   // Phase 6 daily challenge: one completion bonus per calendar day.
   try {
     const d = claimDaily();
-    if (d.ok) { addMoney(profile, d.money); refreshEconHUD(); persistProfile(true); popMoney(`DAILY +$${d.money}`); }
+    if (d.ok) { addCoins(profile, d.coins); refreshEconHUD(); persistProfile(true); popCoins(`DAILY +$${d.coins}`); }
   } catch {}
   try { logEvent('race_finish', { rank }); settings = saveSettings({ lastPlayedAt: Date.now() }); } catch {}
   const suffix=rank===1?'ST':rank===2?'ND':rank===3?'RD':'TH';
   pauseTitle.textContent=rank===1?'YOU WIN!':`P${rank} FINISH`;
-  pauseSub.textContent=(rank===1?`Champion — ${TOTAL_LAPS} laps`:`You finished ${rank}${suffix} of 6`)+`  +$${moneyBonus} +${xpGain}XP`;
+  pauseSub.textContent=(rank===1?`Champion — ${TOTAL_LAPS} laps`:`You finished ${rank}${suffix} of 6`)+`  +$${coinsBonus} +${xpGain}XP`;
   document.getElementById('restartBtn').textContent='RACE AGAIN';
 }
 
@@ -2931,7 +3038,7 @@ function updateHUD(){
     fuelFill.style.width=fp+'%';
     fuelFill.className=fp<22?'low':'';
   }
-  if(!player.out && started && player.fuel<22 && !lowFuelWarned){ lowFuelWarned=true; popMoney('LOW FUEL — FIND ⛽',''); }
+  if(!player.out && started && player.fuel<22 && !lowFuelWarned){ lowFuelWarned=true; popCoins('LOW FUEL — FIND ⛽',''); }
 }
 
 function drawMinimap(){
@@ -2954,7 +3061,7 @@ function drawMinimap(){
   // Phase 11: brands (blue squares) + people (pink dots)
   brandBoards.forEach(b=>{ const x=tx(b.x), y=tz(b.z); miniCtx.fillStyle='#2d7dff'; miniCtx.fillRect(x-2.5,y-2.5,5,5); });
   peopleBoards.forEach(p=>{ const x=tx(p.x), y=tz(p.z); miniCtx.beginPath(); miniCtx.arc(x,y,2.5,0,Math.PI*2); miniCtx.fillStyle='#ff6ab0'; miniCtx.fill(); });
-  moneyTokens.forEach(t=>{ if(!t.alive) return; const x=tx(t.pos.x), y=tz(t.pos.z); miniCtx.beginPath(); miniCtx.arc(x,y,3,0,Math.PI*2); miniCtx.fillStyle='#ffd700'; miniCtx.fill(); miniCtx.strokeStyle='rgba(0,0,0,.6)'; miniCtx.lineWidth=1; miniCtx.stroke(); });
+  coinsTokens.forEach(t=>{ if(!t.alive) return; const x=tx(t.pos.x), y=tz(t.pos.z); miniCtx.beginPath(); miniCtx.arc(x,y,3,0,Math.PI*2); miniCtx.fillStyle='#ffd700'; miniCtx.fill(); miniCtx.strokeStyle='rgba(0,0,0,.6)'; miniCtx.lineWidth=1; miniCtx.stroke(); });
   projectiles.forEach(pr=>{ if(!pr.alive) return; const x=tx(pr.pos.x), y=tz(pr.pos.z); miniCtx.beginPath(); miniCtx.arc(x,y, pr.type==='mine'?2.6:1.8,0,Math.PI*2); miniCtx.fillStyle=pr.type==='mine'?'#8a2be2': pr.type==='rocket'?'#ff3b30':'#ffcc00'; miniCtx.fill(); });
   cars.forEach(c=>{
     if(typeof netMode!=='undefined' && netMode==='online' && !isPractice() && !c.isPlayer) return; // bots hidden online (shown in practice)
@@ -3029,6 +3136,12 @@ function updatePerfHUD(dt){
 }
 function frame(now){
   requestAnimationFrame(frame);
+  // PHASE 16: global frame counters (debug panel + headless layout tests)
+  window.__rkFrames = (window.__rkFrames || 0) + 1;
+  window.__rkFrameNow = now;
+  if (!window.__rkFpsT0) { window.__rkFpsT0 = now; window.__rkFpsN = 0; }
+  window.__rkFpsN++;
+  if (now - window.__rkFpsT0 >= 1000) { window.__rkFps = Math.round(window.__rkFpsN * 1000 / (now - window.__rkFpsT0)); window.__rkFpsT0 = now; window.__rkFpsN = 0; }
   const dtMs=Math.min(50, now-last); last=now; const dt=dtMs/1000; acc+=dt;
   pollGamepad();
   if (skyTime === 'auto') applyTimeOfDay((gameTime * 0.008) % 1);
@@ -3070,7 +3183,7 @@ function frame(now){
     // lap counting moved into updateCar (Phase 10 wrap-aware checkpoints)
     tickProjectiles(FIXED);
     tickPickups(FIXED);
-    tickMoneyTokens(FIXED);
+    tickCoinsTokens(FIXED);
     tickBlocks(FIXED);
     tickHazards(FIXED);
     tickBanners(FIXED);
@@ -3087,8 +3200,10 @@ function frame(now){
   renderer.render(scene,camera);
 }
 requestAnimationFrame(frame);
-addEventListener('resize',()=>{ renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); updateOrientation(); });
-addEventListener('orientationchange',()=> setTimeout(updateOrientation, 200));
+addEventListener('resize',()=>{ updateHudScale(); updateOrientation(); });
+addEventListener('orientationchange',()=> setTimeout(()=>{ updateHudScale(); updateOrientation(); }, 250));
+if (window.visualViewport) visualViewport.addEventListener('resize', ()=>{ updateHudScale(); updateOrientation(); });
+document.addEventListener('fullscreenchange', ()=> setTimeout(updateHudScale, 120));
 // Phase 7 init: quality select, time-of-day, orientation prompt
 if (setQuality) {
   setQuality.value = qualityMode;
@@ -3104,4 +3219,55 @@ if (setTOD) {
 }
 setTODMode(skyTime);
 updateOrientation();
+updateHudScale();
 setTimeout(()=>{ if(!started) centerMsg.innerHTML='<h1>ROAD KILL</h1><p>TAP TO CONNECT — ONLINE ONLY</p><p style="font-size:11px;opacity:.6;margin-top:4px">Quick match, private rooms & practice — all on the server.</p>'; },500);
+
+// ---------- PHASE 16 boot: build the world AFTER all declarations ----------
+// (was: buildTrack/placeCars/spawnPickups/spawnRoadblocks called mid-file before
+// their state existed -> dead static page on phones; see Phase 16 notes in ROADMAP)
+function bootWorld(){
+  try {
+    buildTrack(currentTrackIdx);
+    placeCars();
+    spawnPickups();
+    spawnRoadblocks();
+    window.__rkBooted = true;
+  } catch (e) {
+    window.__rkBootError = String(e && e.stack || e);
+    console.error('[ROADKILL] boot failed:', e);
+  }
+}
+bootWorld();
+
+// ---------- PHASE 16 hidden debug panel: tap top-left corner 3x ----------
+const debugPanel = document.getElementById('debugPanel');
+let cornerTaps = 0, cornerTapTimer = null;
+addEventListener('pointerdown', (e) => {
+  const w = innerWidth, h = innerHeight;
+  if (e.clientX < w * 0.18 && e.clientY < h * 0.18) {
+    cornerTaps++;
+    clearTimeout(cornerTapTimer);
+    cornerTapTimer = setTimeout(() => (cornerTaps = 0), 1200);
+    if (cornerTaps >= 3) { cornerTaps = 0; if (debugPanel) debugPanel.classList.toggle('show'); }
+  }
+}, { passive: true });
+let dbgWebgl = 'unknown';
+try { const t = document.createElement('canvas'); dbgWebgl = (t.getContext('webgl2') ? 'WebGL2' : t.getContext('webgl') ? 'WebGL1' : 'NONE'); } catch (e) { dbgWebgl = 'error'; }
+setInterval(() => {
+  if (!debugPanel || !debugPanel.classList.contains('show')) return;
+  let renderer_ = 'n/a';
+  try { renderer_ = dbgWebgl; } catch {}
+  const lines = [
+    `SCREEN    ${innerWidth} x ${innerHeight} @${devicePixelRatio.toFixed(2)}x`,
+    `ORIENT    ${innerWidth >= innerHeight ? 'landscape' : 'PORTRAIT (blocked)'}`,
+    `VIEWPORT  vis ${Math.round((visualViewport && visualViewport.width) || innerWidth)} x ${Math.round((visualViewport && visualViewport.height) || innerHeight)}`,
+    `FULLSCR   ${document.fullscreenElement ? 'yes' : 'no'}`,
+    `WEBGL     ${dbgWebgl} (${renderer.info ? 'three ok' : 'three?'})`,
+    `FPS       ${Math.round(fpsEMA)} · ${renderer.info.render.calls} calls · ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris`,
+    `QUALITY   ${qualityMode.toUpperCase()}`,
+    `SERVER    ${net && net.connected ? 'connected' : 'offline'} ${net && net.roomCode ? 'room ' + net.roomCode : ''} ${net && net.lastRtt ? 'rtt ' + Math.round(net.lastRtt) + 'ms' : ''}`,
+    `BOOT      ${window.__rkBooted ? 'ok' : window.__rkBootError ? 'FAILED' : '…'}`,
+    `SCALE     hud ${getComputedStyle(document.documentElement).getPropertyValue('--hudscale').trim()} · rotate ${portraitBlocked ? 'blocked' : 'free'}`,
+  ];
+  debugPanel.textContent = lines.join('\n');
+}, 500);

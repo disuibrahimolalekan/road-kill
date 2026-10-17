@@ -48,7 +48,7 @@ export async function supabaseSync(profile) {
     const res = await fetch(`${url}/rest/v1/profiles?account_id=eq.${getAccountId()}`, {
       method: 'PATCH',
       headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ money: profile.money, xp: profile.xp, equipped_skin: profile.equippedSkin, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ coins: profile.coins, xp: profile.xp, equipped_skin: profile.equippedSkin, updated_at: new Date().toISOString() }),
     });
     return { ok: res.ok, status: res.status };
   } catch (e) {

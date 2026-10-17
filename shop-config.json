@@ -1,33 +1,442 @@
 {
-  "_comment": "ROAD KILL shop config — every item carries a free/paid flag. Edit prices here; both the game and the server read this file. Currency: gold (money) or gems.",
+  "_comment": "ROAD KILL shop config \u2014 every item carries a free/paid flag. Edit prices here; both the game and the server read this file. Currency: gold (coins) or gems.",
   "vehicles": [
-    { "id": "falcon_s",  "name": "FALCON S",      "class": "super", "top": 40, "accel": 1.00, "handling": 1.00, "hp": 100, "fuel": 70, "fuelUse": 1.00, "slots": 1, "price": 0,   "currency": "gold", "free": true,  "desc": "Balanced club racer. Free starter." },
-    { "id": "vortex_gt", "name": "VORTEX GT",     "class": "super", "top": 46, "accel": 1.05, "handling": 0.95, "hp": 85,  "fuel": 60, "fuelUse": 1.10, "slots": 1, "price": 650, "currency": "gold", "free": false, "desc": "Top-speed missile. Fragile, thirsty." },
-    { "id": "monarch",   "name": "MONARCH",       "class": "super", "top": 38, "accel": 0.95, "handling": 0.90, "hp": 150, "fuel": 80, "fuelUse": 1.05, "slots": 2, "price": 25,  "currency": "gems", "free": false, "desc": "Heavy grand tourer. Twin mounts." },
-    { "id": "nebula",    "name": "NEBULA RAY",    "class": "scifi", "top": 41, "accel": 1.00, "handling": 1.25, "hp": 90,  "fuel": 85, "fuelUse": 0.80, "slots": 1, "price": 700, "currency": "gold", "free": false, "desc": "Hover saucer. Corners on rails, sips fuel." },
-    { "id": "pulsar",    "name": "PULSAR X",      "class": "scifi", "top": 45, "accel": 1.10, "handling": 1.10, "hp": 80,  "fuel": 65, "fuelUse": 1.00, "slots": 2, "price": 30,  "currency": "gems", "free": false, "desc": "Twin-pod interceptor. Fast and frail." },
-    { "id": "bulwark",   "name": "BULWARK",       "class": "war",   "top": 36, "accel": 0.90, "handling": 0.85, "hp": 180, "fuel": 85, "fuelUse": 1.10, "slots": 2, "price": 500, "currency": "gold", "free": false, "desc": "Armor king. Slow but unstoppable." },
-    { "id": "marauder",  "name": "MARAUDER",      "class": "war",   "top": 40, "accel": 1.00, "handling": 0.95, "hp": 140, "fuel": 75, "fuelUse": 1.00, "slots": 2, "price": 800, "currency": "gold", "free": false, "desc": "Gun-truck all-rounder." },
-    { "id": "jackal",    "name": "JACKAL RUNNER", "class": "war",   "top": 44, "accel": 1.10, "handling": 1.05, "hp": 95,  "fuel": 65, "fuelUse": 0.95, "slots": 1, "price": 20,  "currency": "gems", "free": false, "desc": "Fast scout. Hits hard, folds fast." },
-    { "id": "tortoise",  "name": "TORTOISE H",    "class": "tank",  "top": 33, "accel": 0.85, "handling": 0.80, "hp": 220, "fuel": 95, "fuelUse": 1.15, "slots": 2, "price": 600, "currency": "gold", "free": false, "desc": "Siege hull. A wall with a turret." },
-    { "id": "rhino",     "name": "RHINO SIEGE",   "class": "tank",  "top": 35, "accel": 0.90, "handling": 0.82, "hp": 200, "fuel": 90, "fuelUse": 1.10, "slots": 2, "price": 35,  "currency": "gems", "free": false, "desc": "Assault tank. Big gun energy." },
-    { "id": "trike",     "name": "ROCKET TRIKE",  "class": "crazy", "top": 43, "accel": 1.25, "handling": 1.00, "hp": 75,  "fuel": 55, "fuelUse": 1.00, "slots": 1, "price": 450, "currency": "gold", "free": false, "desc": "Three wheels, one rocket, no fear." },
-    { "id": "doomkart",  "name": "DOOM KART",     "class": "crazy", "top": 39, "accel": 1.05, "handling": 1.30, "hp": 85,  "fuel": 60, "fuelUse": 0.90, "slots": 1, "price": 15,  "currency": "gems", "free": false, "desc": "Go-kart with a rocket rack. Menace." }
+    {
+      "id": "falcon_s",
+      "name": "FALCON S",
+      "class": "super",
+      "top": 40,
+      "accel": 1.0,
+      "handling": 1.0,
+      "hp": 100,
+      "fuel": 70,
+      "fuelUse": 1.0,
+      "slots": 1,
+      "price": 0,
+      "currency": "coins",
+      "free": true,
+      "desc": "Balanced club racer. Free starter.",
+      "premium": false
+    },
+    {
+      "id": "vortex_gt",
+      "name": "VORTEX GT",
+      "class": "super",
+      "top": 46,
+      "accel": 1.05,
+      "handling": 0.95,
+      "hp": 85,
+      "fuel": 60,
+      "fuelUse": 1.1,
+      "slots": 1,
+      "price": 650,
+      "currency": "coins",
+      "free": false,
+      "desc": "Top-speed missile. Fragile, thirsty.",
+      "premium": false
+    },
+    {
+      "id": "monarch",
+      "name": "MONARCH",
+      "class": "super",
+      "top": 38,
+      "accel": 0.95,
+      "handling": 0.9,
+      "hp": 150,
+      "fuel": 80,
+      "fuelUse": 1.05,
+      "slots": 2,
+      "price": 1000,
+      "currency": "coins",
+      "free": false,
+      "desc": "Heavy grand tourer. Twin mounts.",
+      "premium": true
+    },
+    {
+      "id": "nebula",
+      "name": "NEBULA RAY",
+      "class": "scifi",
+      "top": 41,
+      "accel": 1.0,
+      "handling": 1.25,
+      "hp": 90,
+      "fuel": 85,
+      "fuelUse": 0.8,
+      "slots": 1,
+      "price": 700,
+      "currency": "coins",
+      "free": false,
+      "desc": "Hover saucer. Corners on rails, sips fuel.",
+      "premium": false
+    },
+    {
+      "id": "pulsar",
+      "name": "PULSAR X",
+      "class": "scifi",
+      "top": 45,
+      "accel": 1.1,
+      "handling": 1.1,
+      "hp": 80,
+      "fuel": 65,
+      "fuelUse": 1.0,
+      "slots": 2,
+      "price": 1100,
+      "currency": "coins",
+      "free": false,
+      "desc": "Twin-pod interceptor. Fast and frail.",
+      "premium": true
+    },
+    {
+      "id": "bulwark",
+      "name": "BULWARK",
+      "class": "war",
+      "top": 36,
+      "accel": 0.9,
+      "handling": 0.85,
+      "hp": 180,
+      "fuel": 85,
+      "fuelUse": 1.1,
+      "slots": 2,
+      "price": 500,
+      "currency": "coins",
+      "free": false,
+      "desc": "Armor king. Slow but unstoppable.",
+      "premium": false
+    },
+    {
+      "id": "marauder",
+      "name": "MARAUDER",
+      "class": "war",
+      "top": 40,
+      "accel": 1.0,
+      "handling": 0.95,
+      "hp": 140,
+      "fuel": 75,
+      "fuelUse": 1.0,
+      "slots": 2,
+      "price": 800,
+      "currency": "coins",
+      "free": false,
+      "desc": "Gun-truck all-rounder.",
+      "premium": false
+    },
+    {
+      "id": "jackal",
+      "name": "JACKAL RUNNER",
+      "class": "war",
+      "top": 44,
+      "accel": 1.1,
+      "handling": 1.05,
+      "hp": 95,
+      "fuel": 65,
+      "fuelUse": 0.95,
+      "slots": 1,
+      "price": 900,
+      "currency": "coins",
+      "free": false,
+      "desc": "Fast scout. Hits hard, folds fast.",
+      "premium": true
+    },
+    {
+      "id": "tortoise",
+      "name": "TORTOISE H",
+      "class": "tank",
+      "top": 33,
+      "accel": 0.85,
+      "handling": 0.8,
+      "hp": 220,
+      "fuel": 95,
+      "fuelUse": 1.15,
+      "slots": 2,
+      "price": 600,
+      "currency": "coins",
+      "free": false,
+      "desc": "Siege hull. A wall with a turret.",
+      "premium": false
+    },
+    {
+      "id": "rhino",
+      "name": "RHINO SIEGE",
+      "class": "tank",
+      "top": 35,
+      "accel": 0.9,
+      "handling": 0.82,
+      "hp": 200,
+      "fuel": 90,
+      "fuelUse": 1.1,
+      "slots": 2,
+      "price": 1300,
+      "currency": "coins",
+      "free": false,
+      "desc": "Assault tank. Big gun energy.",
+      "premium": true
+    },
+    {
+      "id": "trike",
+      "name": "ROCKET TRIKE",
+      "class": "crazy",
+      "top": 43,
+      "accel": 1.25,
+      "handling": 1.0,
+      "hp": 75,
+      "fuel": 55,
+      "fuelUse": 1.0,
+      "slots": 1,
+      "price": 450,
+      "currency": "coins",
+      "free": false,
+      "desc": "Three wheels, one rocket, no fear.",
+      "premium": false
+    },
+    {
+      "id": "doomkart",
+      "name": "DOOM KART",
+      "class": "crazy",
+      "top": 39,
+      "accel": 1.05,
+      "handling": 1.3,
+      "hp": 85,
+      "fuel": 60,
+      "fuelUse": 0.9,
+      "slots": 1,
+      "price": 700,
+      "currency": "coins",
+      "free": false,
+      "desc": "Go-kart with a rocket rack. Menace.",
+      "premium": true
+    }
   ],
   "upgrades": {
-    "engine":     { "name": "ENGINE",     "levels": [ { "price": 0, "currency": "gold", "free": true, "top": 0, "accel": 0 },      { "price": 300, "currency": "gold", "free": false, "top": 3, "accel": 0.07 },  { "price": 650, "currency": "gold", "free": false, "top": 5, "accel": 0.12 },  { "price": 18, "currency": "gems", "free": false, "top": 8, "accel": 0.20 } ] },
-    "armor":      { "name": "ARMOR",      "levels": [ { "price": 0, "currency": "gold", "free": true, "hp": 0 },                     { "price": 280, "currency": "gold", "free": false, "hp": 30 },                    { "price": 600, "currency": "gold", "free": false, "hp": 60 },                    { "price": 16, "currency": "gems", "free": false, "hp": 100 } ] },
-    "tank":       { "name": "FUEL TANK",  "levels": [ { "price": 0, "currency": "gold", "free": true, "fuel": 0, "use": 0 },          { "price": 250, "currency": "gold", "free": false, "fuel": 20, "use": -0.05 },   { "price": 550, "currency": "gold", "free": false, "fuel": 35, "use": -0.10 },   { "price": 14, "currency": "gems", "free": false, "fuel": 55, "use": -0.18 } ] },
-    "suspension": { "name": "SUSPENSION", "levels": [ { "price": 0, "currency": "gold", "free": true, "handling": 0 },                 { "price": 250, "currency": "gold", "free": false, "handling": 0.08 },            { "price": 550, "currency": "gold", "free": false, "handling": 0.15 },            { "price": 14, "currency": "gems", "free": false, "handling": 0.25 } ] }
+    "engine": {
+      "name": "ENGINE",
+      "levels": [
+        {
+          "price": 0,
+          "currency": "coins",
+          "free": true,
+          "top": 0,
+          "accel": 0
+        },
+        {
+          "price": 300,
+          "currency": "coins",
+          "free": false,
+          "top": 3,
+          "accel": 0.07
+        },
+        {
+          "price": 650,
+          "currency": "coins",
+          "free": false,
+          "top": 5,
+          "accel": 0.12
+        },
+        {
+          "price": 1200,
+          "currency": "coins",
+          "free": false,
+          "top": 8,
+          "accel": 0.2
+        }
+      ]
+    },
+    "armor": {
+      "name": "ARMOR",
+      "levels": [
+        {
+          "price": 0,
+          "currency": "coins",
+          "free": true,
+          "hp": 0
+        },
+        {
+          "price": 280,
+          "currency": "coins",
+          "free": false,
+          "hp": 30
+        },
+        {
+          "price": 600,
+          "currency": "coins",
+          "free": false,
+          "hp": 60
+        },
+        {
+          "price": 1000,
+          "currency": "coins",
+          "free": false,
+          "hp": 100
+        }
+      ]
+    },
+    "tank": {
+      "name": "FUEL TANK",
+      "levels": [
+        {
+          "price": 0,
+          "currency": "coins",
+          "free": true,
+          "fuel": 0,
+          "use": 0
+        },
+        {
+          "price": 250,
+          "currency": "coins",
+          "free": false,
+          "fuel": 20,
+          "use": -0.05
+        },
+        {
+          "price": 550,
+          "currency": "coins",
+          "free": false,
+          "fuel": 35,
+          "use": -0.1
+        },
+        {
+          "price": 900,
+          "currency": "coins",
+          "free": false,
+          "fuel": 55,
+          "use": -0.18
+        }
+      ]
+    },
+    "suspension": {
+      "name": "SUSPENSION",
+      "levels": [
+        {
+          "price": 0,
+          "currency": "coins",
+          "free": true,
+          "handling": 0
+        },
+        {
+          "price": 250,
+          "currency": "coins",
+          "free": false,
+          "handling": 0.08
+        },
+        {
+          "price": 550,
+          "currency": "coins",
+          "free": false,
+          "handling": 0.15
+        },
+        {
+          "price": 900,
+          "currency": "coins",
+          "free": false,
+          "handling": 0.25
+        }
+      ]
+    }
   },
   "weapons": [
-    { "id": "mg",      "name": "M-GUN",         "price": 0,   "currency": "gold", "free": true,  "raceAmmo": 150, "pickupAmmo": 70, "mountable": true,  "desc": "Starter rotary gun." },
-    { "id": "rocket",  "name": "ROCKET",        "price": 250, "currency": "gold", "free": false, "raceAmmo": 8,   "pickupAmmo": 5,  "mountable": true,  "desc": "Dumb-fire punch." },
-    { "id": "mine",    "name": "MINE",          "price": 0,   "currency": "gold", "free": true,  "raceAmmo": 0,   "pickupAmmo": 3,  "mountable": false, "desc": "Pickup-only trap." },
-    { "id": "shield",  "name": "SHIELD",        "price": 0,   "currency": "gold", "free": true,  "raceAmmo": 0,   "pickupAmmo": 1,  "mountable": false, "desc": "Pickup-only guard." },
-    { "id": "plasma",  "name": "PLASMA CASTER", "price": 400, "currency": "gold", "free": false, "raceAmmo": 14,  "pickupAmmo": 8,  "mountable": true,  "desc": "Superheated bolts, small splash." },
-    { "id": "railgun", "name": "RAILGUN",       "price": 18,  "currency": "gems", "free": false, "raceAmmo": 5,   "pickupAmmo": 3,  "mountable": true,  "desc": "Hypersonic slug. Deletes." },
-    { "id": "emp",     "name": "EMP BURST",     "price": 450, "currency": "gold", "free": false, "raceAmmo": 4,   "pickupAmmo": 2,  "mountable": true,  "desc": "Fries boost + fire for 3s." },
-    { "id": "swarm",   "name": "SWARM PODS",    "price": 20,  "currency": "gems", "free": false, "raceAmmo": 4,   "pickupAmmo": 2,  "mountable": true,  "desc": "5 homing micro-missiles." }
-  ]
+    {
+      "id": "mg",
+      "name": "M-GUN",
+      "price": 0,
+      "currency": "coins",
+      "free": true,
+      "raceAmmo": 150,
+      "pickupAmmo": 70,
+      "mountable": true,
+      "desc": "Starter rotary gun."
+    },
+    {
+      "id": "rocket",
+      "name": "ROCKET",
+      "price": 250,
+      "currency": "coins",
+      "free": false,
+      "raceAmmo": 8,
+      "pickupAmmo": 5,
+      "mountable": true,
+      "desc": "Dumb-fire punch."
+    },
+    {
+      "id": "mine",
+      "name": "MINE",
+      "price": 0,
+      "currency": "coins",
+      "free": true,
+      "raceAmmo": 0,
+      "pickupAmmo": 3,
+      "mountable": false,
+      "desc": "Pickup-only trap."
+    },
+    {
+      "id": "shield",
+      "name": "SHIELD",
+      "price": 0,
+      "currency": "coins",
+      "free": true,
+      "raceAmmo": 0,
+      "pickupAmmo": 1,
+      "mountable": false,
+      "desc": "Pickup-only guard."
+    },
+    {
+      "id": "plasma",
+      "name": "PLASMA CASTER",
+      "price": 400,
+      "currency": "coins",
+      "free": false,
+      "raceAmmo": 14,
+      "pickupAmmo": 8,
+      "mountable": true,
+      "desc": "Superheated bolts, small splash."
+    },
+    {
+      "id": "railgun",
+      "name": "RAILGUN",
+      "price": 900,
+      "currency": "coins",
+      "free": false,
+      "raceAmmo": 5,
+      "pickupAmmo": 3,
+      "mountable": true,
+      "desc": "Hypersonic slug. Deletes."
+    },
+    {
+      "id": "emp",
+      "name": "EMP BURST",
+      "price": 450,
+      "currency": "coins",
+      "free": false,
+      "raceAmmo": 4,
+      "pickupAmmo": 2,
+      "mountable": true,
+      "desc": "Fries boost + fire for 3s."
+    },
+    {
+      "id": "swarm",
+      "name": "SWARM PODS",
+      "price": 950,
+      "currency": "coins",
+      "free": false,
+      "raceAmmo": 4,
+      "pickupAmmo": 2,
+      "mountable": true,
+      "desc": "5 homing micro-missiles."
+    }
+  ],
+  "goldPacks": {
+    "wired": false,
+    "packs": [
+      {
+        "gold": 20,
+        "naira": 500
+      },
+      {
+        "gold": 45,
+        "naira": 1000
+      },
+      {
+        "gold": 100,
+        "naira": 2000
+      }
+    ]
+  }
 }

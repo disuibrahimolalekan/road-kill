@@ -17,7 +17,7 @@ function normalizeProfile(p) {
   const out = { ...d, ...p };
   if (!Array.isArray(out.unlockedSkins)) out.unlockedSkins = ['default'];
   if (!out.equippedSkin) out.equippedSkin = 'default';
-  if (typeof out.money !== 'number') out.money = d.money;
+  if (typeof out.coins !== 'number') out.coins = d.coins;
   if (typeof out.gems !== 'number') out.gems = d.gems;
   if (typeof out.xp !== 'number') out.xp = 0;
   out.level = getLevelFromXP(out.xp);
@@ -25,7 +25,7 @@ function normalizeProfile(p) {
   if (!out.stats || typeof out.stats !== 'object') out.stats = { ...d.stats };
   if (typeof out.seasonPoints !== 'number') out.seasonPoints = 0;
   if (!Array.isArray(out.seasonClaimed)) out.seasonClaimed = [];
-  for (const k of ['races', 'wins', 'kills', 'moneyCollected', 'bestPos']) {
+  for (const k of ['races', 'wins', 'kills', 'coinsCollected', 'bestPos']) {
     if (typeof out.stats[k] !== 'number') out.stats[k] = d.stats[k] ?? 0;
   }
   out.version = 2;
@@ -151,12 +151,12 @@ export function saveProfileUnified(profile, opts = {}) {
   saveProfileLS(profile);
   if (opts.immediate) {
     saveProfileIDB(profile);
-    if (!opts.noSync) enqueueSyncOp('profile.save', { money: profile.money, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
+    if (!opts.noSync) enqueueSyncOp('profile.save', { coins: profile.coins, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
   } else {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveProfileIDB(profile);
-      if (!opts.noSync) enqueueSyncOp('profile.save', { money: profile.money, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
+      if (!opts.noSync) enqueueSyncOp('profile.save', { coins: profile.coins, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
     }, 250);
   }
   return profile;
@@ -188,9 +188,9 @@ export async function recordMatch(result) {
     rank: result.rank ?? 6,
     laps: result.laps ?? 3,
     kills: result.kills ?? 0,
-    moneyBonus: result.moneyBonus ?? 0,
+    coinsBonus: result.coinsBonus ?? 0,
     xpGain: result.xpGain ?? 0,
-    moneyCollected: result.moneyCollected ?? 0,
+    coinsCollected: result.coinsCollected ?? 0,
     durationSec: result.durationSec ?? 0,
   };
   try {
@@ -208,13 +208,13 @@ export async function getMatches(limit = 20) {
 
 export async function getMatchStats() {
   const list = await getMatches(200);
-  const stats = { races: list.length, wins: 0, bestPos: 6, kills: 0, xp: 0, money: 0 };
+  const stats = { races: list.length, wins: 0, bestPos: 6, kills: 0, xp: 0, coins: 0 };
   for (const m of list) {
     if (m.rank === 1) stats.wins++;
     stats.bestPos = Math.min(stats.bestPos, m.rank || 6);
     stats.kills += m.kills || 0;
     stats.xp += m.xpGain || 0;
-    stats.money += m.moneyBonus || 0;
+    stats.coins += m.coinsBonus || 0;
   }
   if (!list.length) stats.bestPos = 0;
   return stats;

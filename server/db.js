@@ -3,7 +3,7 @@
 // Currency is awarded by the server only — clients can never grant themselves.
 // Phase 9: server-checked shop purchases (vehicles/upgrades/weapons) from shop-config.json.
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { AWARD_KILL_MONEY, AWARD_KILL_XP, AWARD_FINISH_MONEY, AWARD_FINISH_XP, SEASON_ID } from '../src/netproto.js';
+import { AWARD_KILL_COINS, AWARD_KILL_XP, AWARD_FINISH_COINS, AWARD_FINISH_XP, SEASON_ID } from '../src/netproto.js';
 
 const PATH = new URL('./db.json', import.meta.url);
 
@@ -50,17 +50,21 @@ function profileOf(db, accountId) {
   if (!db.accounts[accountId]) {
     db.accounts[accountId] = {
       id: accountId, name: 'Racer', skin: 'default',
-      money: 80, gems: 14, xp: 0,
+      coins: 80, gems: 14, gold: 0, xp: 0,
       stats: { races: 0, wins: 0, kills: 0, bestPos: 6 },
       seasonPoints: 0, seasonId: SEASON_ID,
-      inventory: { vehicles: ['falcon_s'], weapons: ['mg'], upgrades: {} },
+      inventory: { vehicles: ['falcon_s'], weapons: ['mg'], upgrades: {}, skins: ['default'] },
       createdAt: Date.now(), lastSeen: Date.now(),
     };
   }
   const p = db.accounts[accountId];
-  if (!p.inventory) p.inventory = { vehicles: ['falcon_s'], weapons: ['mg'], upgrades: {} };
+  if (typeof p.coins !== 'number') p.coins = (typeof p.money === 'number') ? p.money : 80;
+  delete p.money; // Phase 14 rename
+  if (typeof p.gold !== 'number') p.gold = 0;
+  if (!p.inventory) p.inventory = { vehicles: ['falcon_s'], weapons: ['mg'], upgrades: {}, skins: ['default'] };
   if (!Array.isArray(p.inventory.vehicles)) p.inventory.vehicles = ['falcon_s'];
   if (!Array.isArray(p.inventory.weapons)) p.inventory.weapons = ['mg'];
+  if (!Array.isArray(p.inventory.skins)) p.inventory.skins = ['default'];
   if (!p.inventory.upgrades) p.inventory.upgrades = {};
   return p;
 }
@@ -74,32 +78,32 @@ export function getOrCreateAccount(db, accountId, name, skin) {
   return p;
 }
 
-// Server-side kill award. Returns {money, xp} granted.
+// Server-side kill award. Returns {coins, xp} granted.
 export function awardKill(db, killerAccountId) {
   const p = profileOf(db, killerAccountId);
-  p.money += AWARD_KILL_MONEY;
+  p.coins += AWARD_KILL_COINS;
   p.xp += AWARD_KILL_XP;
   p.seasonPoints += AWARD_KILL_XP;
   p.stats.kills++;
   saveDB(db);
-  return { money: AWARD_KILL_MONEY, xp: AWARD_KILL_XP };
+  return { coins: AWARD_KILL_COINS, xp: AWARD_KILL_XP };
 }
 
 // Server-side finish award. rank is validated by caller (1..6, room size).
 export function awardFinish(db, accountId, rank) {
   const p = profileOf(db, accountId);
   const i = Math.max(0, Math.min(5, (rank | 0) - 1));
-  const money = AWARD_FINISH_MONEY[i], xp = AWARD_FINISH_XP[i];
-  p.money += money;
+  const coins = AWARD_FINISH_COINS[i], xp = AWARD_FINISH_XP[i];
+  p.coins += coins;
   p.xp += xp;
   p.seasonPoints += xp;
   p.stats.races++;
   if (rank === 1) p.stats.wins++;
   p.stats.bestPos = Math.min(p.stats.bestPos || 6, rank);
-  db.matches.push({ id: db.seq++, accountId, rank, money, xp, date: Date.now(), season: SEASON_ID });
+  db.matches.push({ id: db.seq++, accountId, rank, coins, xp, date: Date.now(), season: SEASON_ID });
   if (db.matches.length > 500) db.matches.splice(0, db.matches.length - 500);
   saveDB(db);
-  return { money, xp };
+  return { coins, xp };
 }
 
 export function leaderboard(db, limit = 10) {
@@ -172,12 +176,12 @@ export function buyItem(db, accountId, kind, item, level, vehicle) {
   const charge = (price, currency) => {
     if (price === 0) return true;
     if (currency === 'gems') { if (p.gems < price) return false; p.gems -= price; }
-    else { if (p.money < price) return false; p.money -= price; }
+    else { if (p.coins < price) return false; p.coins -= price; }
     return true;
   };
   const done = (extra = {}) => {
     saveDB(db);
-    return { ok: true, kind, item, money: p.money, gems: p.gems, inventory: inv, ...extra };
+    return { ok: true, kind, item, coins: p.coins, gems: p.gems, inventory: inv, ...extra };
   };
   if (kind === 'vehicle') {
     const v = SHOP.vehicles.find((x) => x.id === item);
@@ -240,15 +244,15 @@ export function loadoutAmmoLedger(mounts) {
   return ledger;
 }
 
-// Phase 13 — server-minted money tokens (replaces the local wallet).
+// Phase 13 — server-minted coins tokens (replaces the local wallet).
 // Bounded per claim so collectors can't invent cash.
 export const TOKEN_MAX_VALUE = 48;
 export function awardToken(db, accountId, value) {
   const v = Math.max(0, Math.min(TOKEN_MAX_VALUE, value | 0));
-  if (!v) return { money: 0 };
+  if (!v) return { coins: 0 };
   const p = profileOf(db, accountId);
-  p.money += v;
-  p.stats.moneyCollected = (p.stats.moneyCollected || 0) + v;
+  p.coins += v;
+  p.stats.coinsCollected = (p.stats.coinsCollected || 0) + v;
   saveDB(db);
-  return { money: v };
+  return { coins: v };
 }

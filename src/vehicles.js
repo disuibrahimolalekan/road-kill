@@ -62,12 +62,12 @@ export function priceText(item) {
   return item.currency === 'gems' ? `${item.price} 💎` : `$${item.price}`;
 }
 function canAfford(profile, price, currency) {
-  return currency === 'gems' ? profile.gems >= price : profile.money >= price;
+  return currency === 'gems' ? profile.gems >= price : profile.coins >= price;
 }
 function pay(profile, price, currency) {
   if (price === 0) return true;
   if (currency === 'gems') { if (profile.gems < price) return false; profile.gems -= price; }
-  else { if (profile.money < price) return false; profile.money -= price; }
+  else { if (profile.coins < price) return false; profile.coins -= price; }
   return true;
 }
 

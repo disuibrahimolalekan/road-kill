@@ -44,6 +44,6 @@ export function dailyChallenge(date = new Date()) {
     seed,
     title: `Daily: race ${tracks[Math.abs(h) % 3].toUpperCase()} — finish = +$100`,
     trackId: tracks[Math.abs(h) % 3],
-    bonusMoney: 100,
+    bonusCoins: 100,
   };
 }

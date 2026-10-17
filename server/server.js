@@ -148,7 +148,7 @@ const inputRates = new Map();
 const fireRates = new Map();
 const buyRates = new Map(); // Phase 9 shop rate limit
 const bannerRates = new Map(); // Phase 11 banner event rate limit
-const tokenRates = new Map(); // Phase 13 money-token claim rate limit
+const tokenRates = new Map(); // Phase 13 coins-token claim rate limit
 
 function strike(room, id, reason) {
   const c = room.clients.get(id);
@@ -180,7 +180,7 @@ wss.on('connection', (ws) => {
       accountId = acc.id;
       tag = tagFor(acc.id);
       send(ws, { type: MSG.WELCOME, clientId: id, tickHz: NET_TICK_HZ });
-      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, tag, money: acc.money, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
+      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, tag, coins: acc.coins, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
       return;
     }
 
@@ -197,7 +197,7 @@ wss.on('connection', (ws) => {
       send(ws, { type: MSG.BUY_OK, ...r });
       if (r.ok) {
         const acc = getOrCreateAccount(db, accountId);
-        send(ws, { type: MSG.ACCOUNT, accountId: acc.id, money: acc.money, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
+        send(ws, { type: MSG.ACCOUNT, accountId: acc.id, coins: acc.coins, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
       }
       return;
     }
@@ -256,14 +256,14 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // Phase 13 — money-token claims: server mints bounded token cash.
+    // Phase 13 — coins-token claims: server mints bounded token cash.
     if (m.type === MSG.TOKEN) {
       if (!accountId) return;
       if (!hitRate(tokenRates, id, 10)) return;
       const value = Math.max(0, Math.min(48, +m.value || 0));
       if (!value) return;
       const r = awardToken(db, accountId, value);
-      send(ws, { type: MSG.AWARD, money: r.money, xp: 0, reason: 'token' });
+      send(ws, { type: MSG.AWARD, coins: r.coins, xp: 0, reason: 'token' });
       return;
     }
 
@@ -332,7 +332,7 @@ wss.on('connection', (ws) => {
       car.hp = 100; car.wrecked = false;
       const acc = getOrCreateAccount(db, conn.accountId);
       send(ws, { type: MSG.REVIVE_OK, ...r });
-      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, money: acc.money, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
+      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, coins: acc.coins, xp: acc.xp, gems: acc.gems, inventory: acc.inventory });
       return;
     }
 
@@ -368,7 +368,7 @@ wss.on('connection', (ws) => {
         if (killerAcc) {
           const award = awardKill(db, killerAcc);
           const kw = room.clients.get(id);
-          if (kw) send(kw.ws, { type: MSG.AWARD, money: award.money, xp: award.xp, reason: 'kill' });
+          if (kw) send(kw.ws, { type: MSG.AWARD, coins: award.coins, xp: award.xp, reason: 'kill' });
         }
       }
       broadcast(room, { type: MSG.EVENT_HIT, targetId: m.targetId, hp: target.hp, killed, attackerId: id, weapon: String(m.weapon || 'mg').slice(0, 12), dmg });
@@ -383,9 +383,9 @@ wss.on('connection', (ws) => {
       if (!conn || !conn.accountId) return send(ws, { type: MSG.ERROR, reason: 'no-account' });
       const award = awardFinish(db, conn.accountId, rank);
       conn.revives = 0; // Phase 12: new race resets the revive ladder
-      send(ws, { type: MSG.AWARD, money: award.money, xp: award.xp, reason: 'finish', rank });
+      send(ws, { type: MSG.AWARD, coins: award.coins, xp: award.xp, reason: 'finish', rank });
       const acc = getOrCreateAccount(db, conn.accountId);
-      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, money: acc.money, xp: acc.xp, gems: acc.gems });
+      send(ws, { type: MSG.ACCOUNT, accountId: acc.id, coins: acc.coins, xp: acc.xp, gems: acc.gems });
       return;
     }
 

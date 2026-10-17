@@ -26,14 +26,14 @@ export const MSG = {
   PING: 'ping',
   PONG: 'pong',
   // Phase 5
-  ACCOUNT: 'account',       // S->C {accountId, money, xp} (guest account, no password until Supabase)
+  ACCOUNT: 'account',       // S->C {accountId, coins, xp} (guest account, no password until Supabase)
   FINISH: 'finish',         // C->S {rank} -> S validates + awards
-  AWARD: 'award',            // S->C {money, xp, reason:'kill'|'finish', by?}
+  AWARD: 'award',            // S->C {coins, xp, reason:'kill'|'finish', by?}
   BOARD: 'board',            // C->S {} -> S->C BOARD_DATA
   BOARD_DATA: 'board-data', // S->C {entries:[{name, xp, wins, races}]}
   // Phase 9 — shop
   BUY: 'buy',               // C->S {kind:'vehicle'|'upgrade'|'weapon', item, level?}
-  BUY_OK: 'buy-ok',         // S->C {ok, reason?, kind?, item?, level?, money?, gems?}
+  BUY_OK: 'buy-ok',         // S->C {ok, reason?, kind?, item?, level?, coins?, gems?}
   // Phase 11 — banners
   BANNER: 'banner',         // C->S {action:'view'|'bump'|'like', id} (no reply; 24h stats)
   // Phase 12 — server-owned loadout/fuel/ammo/revives, practice mode
@@ -43,7 +43,7 @@ export const MSG = {
   // Phase 13 — tags, matchmaking, private rooms, server-minted tokens
   START: 'start',           // S->C {humans, bots, inSec} race start signal
   START_REQ: 'start-req',   // C->S {bots} host early-start (private rooms)
-  TOKEN: 'token',           // C->S {value} money-token collect claim -> S->C AWARD
+  TOKEN: 'token',           // C->S {value} coins-token collect claim -> S->C AWARD
   ERROR: 'error',
   BYE: 'bye',
 };
@@ -64,9 +64,9 @@ export function tagFor(accountId) {
 export const QUICK_CHAT = ['GG!', 'Nice shot!', 'Eat dust!', 'Sorry!', 'Rematch?', 'On your left!'];
 
 // Phase 5 — server-authoritative economy + accounts/leaderboard.
-export const AWARD_KILL_MONEY = 48;
+export const AWARD_KILL_COINS = 48;
 export const AWARD_KILL_XP = 18;
-export const AWARD_FINISH_MONEY = [48, 28, 14, 6, 6, 6]; // P1..P6
+export const AWARD_FINISH_COINS = [48, 28, 14, 6, 6, 6]; // P1..P6
 export const AWARD_FINISH_XP = [120, 80, 52, 32, 18, 10];
 export const SEASON_ID = 'S1';
 

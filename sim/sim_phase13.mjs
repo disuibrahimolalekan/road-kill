@@ -109,10 +109,10 @@ try {
   console.log('='.repeat(64));
   send(a, { type: 'token', value: 12 });
   const aw = await waitFor(a, (m) => m.type === 'award' && m.reason === 'token');
-  check('token claim pays via AWARD', !!aw && aw.money === 12);
+  check('token claim pays via AWARD', !!aw && aw.coins === 12);
   send(a, { type: 'token', value: 999 });
   const aw2 = await waitFor(a, (m) => m.type === 'award' && m.reason === 'token');
-  check('token capped at 48', !!aw2 && aw2.money === 48);
+  check('token capped at 48', !!aw2 && aw2.coins === 48);
 
   for (const x of [a, b, h, g]) try { x.ws.close(); } catch {}
 } finally {
