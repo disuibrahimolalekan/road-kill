@@ -1292,17 +1292,30 @@ function placeCars(){
 }
 
 // ---------- PHASE 4 — online multiplayer (solo bots stay as practice forever) ----------
-const onlineBtn = document.getElementById('onlineBtn');
 const netDot = document.getElementById('netDot');
-const onlineOverlay = document.getElementById('onlineOverlay');
-const onlineClose = document.getElementById('onlineClose');
+const connChip = document.getElementById('connChip');
+const connChipText = document.getElementById('connChipText');
+// FIX-PROMPT STEP 1 — one clean main menu:
+//   · PLAY opens #modeOverlay (mode choice: quick / code / private / practice)
+//   · the old lobby overlay (#onlineOverlay) is REMOVED; a compact waiting
+//     room (#roomOverlay) exists only for private rooms and join-with-code
+//   · the ONLINE button is now a passive status chip (#connChip)
+const modeOverlay = document.getElementById('modeOverlay');
+const modeBackBtn = document.getElementById('modeBackBtn');
+const modeQuickBtn = document.getElementById('modeQuickBtn');
+const modeCodeBtn = document.getElementById('modeCodeBtn');
+const modeJoinBtn = document.getElementById('modeJoinBtn');
+const modeHostBtn = document.getElementById('modeHostBtn');
+const modePracticeBtn = document.getElementById('modePracticeBtn');
+const modeCodeEl = document.getElementById('modeCode');
+const modeStatus = document.getElementById('modeStatus');
+const codeRow = document.getElementById('codeRow');
+const roomOverlay = document.getElementById('roomOverlay');
+const roomClose = document.getElementById('roomClose');
 const netStatus = document.getElementById('netStatus');
-const netName = document.getElementById('netName');
-const netServer = document.getElementById('netServer');
-const netCode = document.getElementById('netCode');
-const quickMatchBtn = document.getElementById('quickMatchBtn');
-const joinCodeBtn = document.getElementById('joinCodeBtn');
-const disconnectBtn = document.getElementById('disconnectBtn');
+const netCode = modeCodeEl;            // code input lives in the mode choice now
+const netName = null;
+const netServer = null;
 const rosterList = document.getElementById('rosterList');
 const chatFeed = document.getElementById('chatFeed');
 const chatRow = document.getElementById('chatRow');
@@ -1346,14 +1359,33 @@ function setOnlineMode(on) {
   // Phase 12 practice: bots stay visible (solo grid + server session)
   for (const c of cars) { if (!c.isPlayer) c.mesh.visible = !on || netPractice; }
   if (!on) for (const g of remoteGhosts) { g.active = false; g.netId = null; g.car.mesh.visible = false; }
-  if (onlineBtn) onlineBtn.classList.toggle('online', on);
   if (netDot) netDot.classList.toggle('on', on);
-  if (netStatus) netStatus.textContent = on ? (netPractice ? `PRACTICE room ${net ? net.roomCode : ''} — bots + server wallet` : `ONLINE room ${net ? net.roomCode : ''} — real humans, bots hidden`) : 'Solo mode (bots). Connect to race real humans.';
+  if (connChip) connChip.classList.toggle('online', on);
+  if (connChipText) connChipText.textContent = on ? 'ONLINE' : 'OFFLINE';
+  if (netStatus) netStatus.textContent = on ? (netPractice ? `PRACTICE room ${net ? net.roomCode : ''} — bots + server wallet` : `ONLINE room ${net ? net.roomCode : ''} — real humans, bots hidden`) : 'Not connected. Use PLAY to pick a mode.';
 }
-function openOnline() { if (onlineOverlay) onlineOverlay.classList.add('show'); }
-function closeOnline() { if (onlineOverlay) onlineOverlay.classList.remove('show'); }
-if (onlineBtn) onlineBtn.addEventListener('click', openOnline);
-if (onlineClose) onlineClose.addEventListener('click', closeOnline);
+function openMode() { if (modeOverlay) modeOverlay.classList.add('show'); }
+function closeMode() { if (modeOverlay) modeOverlay.classList.remove('show'); }
+function showRoom() { if (roomOverlay) roomOverlay.classList.add('show'); }
+function hideRoom() { if (roomOverlay) roomOverlay.classList.remove('show'); }
+function resetModePanel() {
+  if (codeRow) codeRow.style.display = 'none';
+  if (modeStatus) modeStatus.textContent = '';
+  const sb = document.getElementById('startBtn'); if (sb) sb.disabled = false;
+}
+function closeAllMenuPanels() { resetModePanel(); closeMode(); hideRoom(); }
+if (modeBackBtn) modeBackBtn.addEventListener('click', () => {
+  // Back always works — and cancels a search/wait instead of stacking screens.
+  try { if (net && net.connected && !started && lobbyMode && lobbyMode !== 'practice') net.disconnect(); } catch {}
+  setOnlineMode(false);
+  closeAllMenuPanels();
+});
+if (roomClose) roomClose.addEventListener('click', () => {
+  // Leaving the waiting room = leave the server and return to the menu.
+  try { if (net) net.disconnect(); } catch {}
+  setOnlineMode(false);
+  closeAllMenuPanels();
+});
 // Phase 13: no username/server boxes — baked server + server tags (netName/netServer elements removed).
 if (chatRow && !chatRow.children.length) {
   QUICK_CHAT.forEach((q) => {
@@ -1370,6 +1402,7 @@ const connSub = document.getElementById('connSub');
 const connCount = document.getElementById('connCount');
 const connSpin = document.getElementById('connSpin');
 const connRetryBtn = document.getElementById('connRetryBtn');
+const connBackBtn = document.getElementById('connBackBtn');   // FIX step 1: every screen has a way back
 let connTimer = null;
 // STEP 1: the four connection states must be visually different at a glance,
 // not the same card with different words. Each state owns a colour, an icon,
@@ -1381,8 +1414,9 @@ const connAttempts = document.getElementById('connAttempts');
 let connAttemptNo = 0;
 function showConnState(state, detail){
   if (!connOverlay) return;
-  if (state === 'hide'){ connOverlay.classList.remove('show'); return; }
+  if (state === 'hide'){ connOverlay.classList.remove('show'); if (connBackBtn) connBackBtn.style.display = 'none'; return; }
   connOverlay.classList.add('show');
+  if (connBackBtn) connBackBtn.style.display = 'block';
   connOverlay.dataset.state = state;              // drives all per-state styling
   if (connAttempts) connAttempts.textContent = connAttemptNo > 1 ? `ATTEMPT ${connAttemptNo}` : '';
   if (connSpin) connSpin.style.display = (state === 'failed' || state === 'waking') ? 'none' : 'block';
@@ -1422,6 +1456,13 @@ function startWakeCountdown(seconds = 60){
 }
 function stopWakeCountdown(){ if (connTimer) { clearInterval(connTimer); connTimer = null; } if (connCount) connCount.textContent = ''; }
 if (connRetryBtn) connRetryBtn.addEventListener('click', ()=>{ connAttemptNo++; showConnState('retry'); connectNet(lobbyMode || 'quick'); });
+if (connBackBtn) connBackBtn.addEventListener('click', ()=>{   // FIX step 1: cancel connecting → back to the menu
+  stopWakeCountdown();
+  showConnState('hide');
+  try { if (net) net.disconnect(); } catch {}
+  setOnlineMode(false);
+  closeAllMenuPanels();
+});
 
 async function ensureConnected() {
   if (net && net.connected) return true;
@@ -1460,14 +1501,14 @@ async function ensureConnected() {
 let lobbyMode = null;
 let isHost = false;
 async function connectNet(mode, codeOverride) {
-  openOnline();
+  lobbyMode = mode;                 // FIX step 1: remember even if connect fails (retry + back)
+  if (modeStatus) modeStatus.textContent = mode === 'practice' ? 'Connecting…' : '';
   if (!await ensureConnected()) return;
-  lobbyMode = mode;
   isHost = (mode === 'host');
   netPractice = (mode === 'practice');
   if (mode === 'code') {
     const code = ((codeOverride || (netCode && netCode.value.trim())) || '').toUpperCase();
-    if (!code) { if (netStatus) netStatus.textContent = 'Paste an invite room code.'; return; }
+    if (!code) { if (modeStatus) modeStatus.textContent = 'Type the 4-letter room code first.'; return; }
     net.joinCode(code);
   } else if (mode === 'host') net.joinHost();
   else if (mode === 'practice') net.joinPractice();
@@ -1475,13 +1516,19 @@ async function connectNet(mode, codeOverride) {
   setOnlineMode(true);
   if (mode === 'practice') {
     // instant start, full bot grid, server-backed wallet
-    hideLobbyPanel();
+    closeMode();
     restart();
     startGame();
     if (netStatus) netStatus.textContent = 'Practice — bots + server wallet.';
+  } else if (mode === 'host' || mode === 'code') {
+    closeMode();
+    showRoom();
+    if (netStatus) netStatus.textContent = mode === 'host' ? 'Private room ready — share the invite link.' : 'Joined — waiting for the room to fill.';
   } else {
-    showLobbyPanel();
-    if (netStatus) netStatus.textContent = mode === 'host' ? 'Private room ready — share the invite link.' : 'Searching for racers… (bots fill after ~15 s)';
+    // Quick match: no lobby screen — keep the mode choice visible with a live
+    // status line (and the BACK button) until the server starts the race.
+    if (modeStatus) modeStatus.textContent = 'SEARCHING FOR RACERS… (bots fill after ~15 s)';
+    if (netStatus) netStatus.textContent = 'Searching for racers… (bots fill after ~15 s)';
   }
 }
 function inviteURL(code) {
@@ -1493,7 +1540,6 @@ setTimeout(() => {
   try {
     const code = new URLSearchParams(location.search).get('room');
     if (code) {
-      openOnline();
       if (netCode) netCode.value = code.toUpperCase();
       connectNet('code', code);
     }
@@ -1576,13 +1622,13 @@ function wireNet(n) {
   };
   // Phase 13 race start: countdown, then local grid sized by the server.
   n.onStart = (m) => {
-    hideLobbyPanel();
-    closeOnline();
+    hideRoom();
+    closeMode();
     const bots = Math.max(0, Math.min(5, m.bots | 0));
     const humans = Array.isArray(m.humans) ? m.humans.length : 0;
     let sec = Math.max(1, m.inSec | 0 || 3);
     paused = false; pauseOverlay.classList.remove('show');
-    centerMsg.style.display = '';
+    centerMsg.classList.add('show');
     const tick = () => {
       if (sec > 0) {
         centerMsg.innerHTML = `<h1>${sec}</h1><p>${humans} HUMANS + ${bots} BOTS — GET READY</p>`;
@@ -1623,9 +1669,8 @@ function wireNet(n) {
     supabaseSync(profile);
   };
   n.onBoard = (m) => {
-    if (!rosterList) return;
     const rows = (m.entries || []).map((e, i) => `<div>${i + 1}. ${esc(e.name)} — ${e.xp}XP · ${e.wins}W/${e.races}</div>`).join('');
-    rosterList.innerHTML = `<b>${icon('trophy')} LEADERBOARD</b><br>${rows || 'No entries yet — finish a race!'}`;
+    renderBoard(`<b>${icon('trophy')} LEADERBOARD</b><br>${rows || 'No entries yet — finish a race!'}`);
   };
   n.onHit = (m) => {
     // Server-side hit registration is authoritative: trust its hp.
@@ -1665,20 +1710,20 @@ function pushKillFeedSilent(attackerId, targetId, weapon) {
     setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 400); }, 2200);
   } catch {}
 }
-if (quickMatchBtn) quickMatchBtn.addEventListener('click', () => connectNet('quick'));
-if (joinCodeBtn) joinCodeBtn.addEventListener('click', () => connectNet('code'));
-const practiceBtn = document.getElementById('practiceBtn');
-if (practiceBtn) practiceBtn.addEventListener('click', () => connectNet('practice'));
-// STEP 2: the PLAY button on the start screen had NO listener anywhere, so the
-// main action of the game silently did nothing. The document-level tap-to-
-// connect handler explicitly ignores taps on <button>, which is why it looked
-// like the button was broken rather than dead. Wire it to the same quick-match
-// path the lobby uses.
+// ==================== FIX-PROMPT STEP 1 — menu wiring ====================
+// The only way into a race is PLAY → mode choice. The old lobby card's
+// quick-match / join-code / host buttons are gone; these buttons in the mode
+// panel replace them one-for-one.
 const playBtn = document.getElementById('playBtn');
-if (playBtn) playBtn.addEventListener('click', () => connectNet('quick'));
-const hostBtn = document.getElementById('hostBtn');
-if (hostBtn) hostBtn.addEventListener('click', () => connectNet('host'));
-const lobbyPanel = document.getElementById('lobbyPanel');
+if (playBtn) playBtn.addEventListener('click', () => { resetModePanel(); openMode(); });
+if (modeQuickBtn) modeQuickBtn.addEventListener('click', () => connectNet('quick'));
+if (modeCodeBtn) modeCodeBtn.addEventListener('click', () => {
+  if (codeRow) codeRow.style.display = (codeRow.style.display === 'none' || !codeRow.style.display) ? '' : 'none';
+  try { if (modeCodeEl) modeCodeEl.focus(); } catch {}
+});
+if (modeJoinBtn) modeJoinBtn.addEventListener('click', () => connectNet('code'));
+if (modeHostBtn) modeHostBtn.addEventListener('click', () => connectNet('host'));
+if (modePracticeBtn) modePracticeBtn.addEventListener('click', () => connectNet('practice'));
 const lobbyInfo = document.getElementById('lobbyInfo');
 const inviteRow = document.getElementById('inviteRow');
 const inviteLink = document.getElementById('inviteLink');
@@ -1686,8 +1731,8 @@ const copyInviteBtn = document.getElementById('copyInviteBtn');
 const botsRow = document.getElementById('botsRow');
 const botsToggle = document.getElementById('botsToggle');
 const startBtn = document.getElementById('startBtn');
-function showLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = ''; }
-function hideLobbyPanel() { if (lobbyPanel) lobbyPanel.style.display = 'none'; }
+function showLobbyPanel() { showRoom(); }
+function hideLobbyPanel() { hideRoom(); }
 if (copyInviteBtn) copyInviteBtn.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(inviteLink.textContent); popCoins('LINK COPIED', 'xp'); }
   catch { popCoins(inviteLink.textContent, ''); }
@@ -1706,17 +1751,17 @@ function setBotCount(n) {
     else { c.out = true; c.outReason = 'bench'; c.mesh.visible = false; }
   });
 }
-if (disconnectBtn) disconnectBtn.addEventListener('click', () => {
-  try { if (net) net.disconnect(); } catch {}
-  setOnlineMode(false);
-  restart();
-  if (netStatus) netStatus.textContent = 'Solo mode (bots). Connect to race real humans.';
-  if (rosterList) rosterList.textContent = 'No lobby yet.';
-});
+// Leaving the waiting room is handled by roomClose (menu helpers above).
+// Leaderboard moved to Settings — the old lobby that hosted it is gone.
 const boardBtn = document.getElementById('boardBtn');
+function renderBoard(html) {
+  const el = document.getElementById('boardList');
+  if (el) { el.style.display = 'block'; el.innerHTML = html; }
+  else if (rosterList) rosterList.innerHTML = html;   // legacy fallback
+}
 if (boardBtn) boardBtn.addEventListener('click', () => {
   if (net && net.online) net.requestBoard();
-  else if (rosterList) rosterList.innerHTML = `<b>${icon('trophy')} LEADERBOARD</b><br>Connect online to see the board.`;
+  else renderBoard(`<b>${icon('trophy')} LEADERBOARD</b><br>Connect online to see the board.`);
 });
 const syncCodeEl = document.getElementById('syncCode');
 const exportBtn = document.getElementById('exportBtn');
@@ -2607,30 +2652,26 @@ document.getElementById('restartBtn').addEventListener('click',()=>{
     document.getElementById('restartBtn').textContent = 'RESTART RACE';
     paused = false; pauseOverlay.classList.remove('show');
     setOnlineMode(false);
-    openOnline();
+    try { if (net) net.disconnect(); } catch {}
+    quitToMenu();               // mid-race drop → clean return to the menu, not the removed lobby
     return;
   }
   restart(); paused=false; pauseOverlay.classList.remove('show');
 });
 let firstTapDone = false;
-// PHASE 16 fix: the 'TAP TO CONNECT' title sits ON TOP of the canvas (pointer-events:auto),
-// so a canvas-only click handler never fired on phone = dead screen. One document-level
-// handler now: first tap = fullscreen+landscape; tap outside any panel = connect & quick match.
+// FIX-PROMPT STEP 1: stray taps no longer start anything. The old handler ran
+// openOnline() + connectNet('quick') on any tap outside a panel, which spawned
+// the (removed) lobby under the start menu — the exact stacked-screen bug this
+// step fixes. The menu's PLAY → mode choice is the only way into a race.
 document.addEventListener('click', (e) => {
   if (!firstTapDone) { firstTapDone = true; tryFullscreenLandscape(); }
-  if (started || isOnline()) return;
-  if (e.target.closest && e.target.closest('button, input, select, a, #onlineOverlay, #settingsOverlay, #garageOverlay, #pauseOverlay, #connOverlay, #rotatePrompt, #reviveOverlay, #outOverlay, .card')) return;
-  openOnline();
-  connectNet('quick');
 });
-function startGame(){ started=true; document.body.classList.add('racing'); centerMsg.style.display='none';
-  // STEP 2: the lobby was never closed when the race began. #onlineOverlay sits
-  // at z-index 21, ABOVE #reviveOverlay (20), so its .card covered the revive
-  // button — the player could read "REVIVE — 1 GEM" yet every tap landed on the
-  // lobby card and nothing happened. The button was never broken; it was
-  // buried. connectNet('practice'/'quick') opens the overlay for status and the
-  // only code that closed it was n.onStart, which practice mode does not emit.
-  closeOnline();
+function startGame(){ started=true; document.body.classList.add('racing'); centerMsg.style.display='none'; centerMsg.classList.remove('show');
+  // FIX step 1: all menu chrome (mode choice, waiting room) closes the moment a
+  // race starts — nothing may stack above the race HUD or the revive/out
+  // overlays again (the old lobby covered the revive button exactly that way).
+  closeMode();
+  hideRoom();
   try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
 function restart(){
   placeCars(); spawnPickups(); resetRoadblocks(); for(const s of shortcutSegs) s.claimed=false; bannerViewed.clear(); if(likeBtn) likeBtn.classList.remove('show'); finished=false; started=true; gameTime=0; shake=0; hitFlashTimer=0; hideReviveOverlay(); hideOutOverlay();
@@ -2664,14 +2705,15 @@ function quitToMenu(){
   hideReviveOverlay(); hideOutOverlay();
   pauseOverlay.classList.remove('show');
   if(garageOverlay) garageOverlay.classList.remove('show');
-  if(onlineOverlay) onlineOverlay.classList.remove('show');
+  if(modeOverlay) modeOverlay.classList.remove('show');
+  if(roomOverlay) roomOverlay.classList.remove('show');
   if(spectateBadge) spectateBadge.classList.remove('show');
   touchSteer=0; touchAccel=0; fireHeld=false; lowFuelWarned=false;   // no stuck inputs
   try{ if(net) net.disconnect(); }catch{}
   setOnlineMode(false);
   document.body.classList.remove('racing');   // #startScreen back, #hud hidden
   placeCars();                                // clean grid for the menu camera orbit
-  centerMsg.style.display='none';
+  centerMsg.style.display='none'; centerMsg.classList.remove('show');
   pauseTitle.textContent='PAUSED'; pauseSub.textContent='Press RESUME to continue';
   const rb=document.getElementById('restartBtn'); if(rb) rb.textContent='RESTART RACE';
   killFeedEl.innerHTML='';
@@ -3749,7 +3791,7 @@ if (setTOD) {
 setTODMode(skyTime);
 updateOrientation();
 updateHudScale();
-setTimeout(()=>{ if(!started) centerMsg.innerHTML='<h1>ROAD KILL</h1><p>TAP TO CONNECT — ONLINE ONLY</p><p style="font-size:11px;opacity:.6;margin-top:4px">Quick match, private rooms & practice — all on the server.</p>'; },500);
+setTimeout(()=>{ if(!started){ centerMsg.classList.remove('show'); centerMsg.innerHTML=''; } },500);  // FIX step 1: the start screen owns the title now
 
 // ---------- PHASE 16 boot: build the world AFTER all declarations ----------
 // (was: buildTrack/placeCars/spawnPickups/spawnRoadblocks called mid-file before

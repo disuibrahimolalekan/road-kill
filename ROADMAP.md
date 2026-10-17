@@ -571,6 +571,37 @@ switch. Both fixed; the second has its own regression test.
 
 **Next:** real-phone check of the street and the Volt (headless cannot composite WebGL).
 
+## FIX-PROMPT v2 — STEP 1: CLEAN MAIN MENU ✅ DONE — 2026-10-17 (code + sim verified; phone test pending)
+Per `/sdcard/Road kill/reference/FIX-PROMPT.md` (v2, 7 steps). This is Step 1 only.
+
+**What changed (index.html + src/main.js):**
+- Menu is now exactly **PLAY / GARAGE / SETTINGS / INSTALL** plus a passive online status chip
+  (#connChip, not a button). The ONLINE button, the lobby card (#onlineOverlay), and the
+  document-wide tap-to-connect quick-match handler are REMOVED.
+- **PLAY opens a mode choice (#modeOverlay):** Quick Match · Join With Code (inline 4-letter input) ·
+  Host Private · Practice · BACK. BACK cancels a search/wait too (disconnects) — no stacked lobby
+  under the menu, which was the old z30-over-z21 bug.
+- Old lobby replaced by a compact waiting room **#roomOverlay (z33)** used only for Host Private and
+  Join With Code: roster, tag, invite link + copy, bots-toggle, START, chat — same element IDs.
+- Quick Match keeps the mode panel open with `SEARCHING FOR RACERS… (bots fill after ~15 s)` status
+  + BACK; the waiting room is never used for it.
+- Connecting screens (#connOverlay) got a **BACK TO MENU** button; RETRY kept.
+- Leaderboard moved to **Settings** (#boardBtn + #boardList); server board renders there.
+- Crash-drop mid-race path (`__dropLobby`) now does a clean `quitToMenu()` instead of reopening a lobby.
+- Fixed the latent countdown bug: `n.onStart`/countdown use `centerMsg.classList.add('show')`
+  (CSS has `#center-msg.show{display:block}`), and `startGame` removes it; legacy
+  "TAP TO CONNECT" boot text removed (#center-msg stays empty at boot).
+- startGame closes mode/room panels before racing; z-order: startScreen 30 < modeOverlay 32 <
+  roomOverlay 33 < connOverlay 40.
+
+**Verification:** `sim/fix-step1-check.mjs` — **ALL PASS** (13 assertions, real local server):
+menu contents, stray-tap no-op, PLAY→mode→BACK, empty-code inline message, Host Private →
+waiting room (Room 8QVA, RK tag, invite shown) → START → racing, MAIN MENU return, Quick Match
+SEARCHING status → bots fill → countdown → race, Practice instant start, menu at 800×360/1280×800,
+zero console errors. Screenshots in `/sdcard/Road kill/screenshots/fix-step1/`.
+`npx vite build` passes. dist rebuilt.
+**Not yet verified on a real phone** — user to test before Step 2.
+
 ## PHASE 14 — Premium Economy ⏸ PAUSED (Prompt 3 orders Phase 16 first)
 Work stopped mid-build (coins rename done in working tree, gold feats/shop not built). Resume after Prompt 3 Steps 1–3.
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.

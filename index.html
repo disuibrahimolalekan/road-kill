@@ -70,8 +70,6 @@
     #menuBtns #playBtn{grid-column:1/-1;min-height:48px;font-size:15px;letter-spacing:.14em;
       background:linear-gradient(90deg,#ff2d2d,#ff8a00);border-color:#ffb84d;color:#180606;
       box-shadow:0 0 22px rgba(255,90,0,.45)}
-    #menuBtns #practiceBtn{border-color:rgba(168,255,96,.5);background:rgba(168,255,96,.10);color:#e2ffc8}
-    #menuBtns #hostBtn{border-color:rgba(112,224,255,.5);background:rgba(112,224,255,.10);color:#d8f4ff}
     #menuBtns #installBtn{display:none;grid-column:1/-1;min-height:34px;border-color:var(--gold);background:rgba(255,204,0,.16);color:#ffeb3b}
     #menuBtns #installBtn.show{display:inline-block}
     #menuEcon{position:relative;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
@@ -260,7 +258,7 @@
     #stayWreckedBtn{margin-top:7px;background:#2d2d3a !important;color:#fff !important}
     #garageOverlay{position:fixed;inset:0;background:rgba(6,6,16,.88);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:18;overflow:auto;padding:16px}
     #garageOverlay.show{display:flex}
-    #garageOverlay .card,#settingsOverlay .card,#onlineOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.14);
+    #garageOverlay .card,#settingsOverlay .card,#modeOverlay .card,#roomOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.14);
       padding:16px;border-radius:16px;min-width:320px;max-width:min(94vw,560px);width:100%;max-height:94vh;overflow:auto}
     /* STEP 2 — garage fit. This overlay was mathematically guaranteed to
        overflow a landscape phone, from two separate faults:
@@ -299,16 +297,29 @@
     #settingsOverlay button.row{margin-top:11px;padding:10px 14px;border-radius:10px;border:0;background:#2d2d3a;color:#fff;font-weight:800;width:100%;pointer-events:auto}
     #settingsOverlay select{width:100%;margin-top:5px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:#23233a;color:#fff;font-weight:700}
     #historyList{margin-top:10px;max-height:130px;overflow:auto;font-size:11px;line-height:1.7;opacity:.85;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px}
+    /* FIX-PROMPT STEP 1: one clean main menu. PLAY opens the mode choice;
+       the old lobby overlay is gone (a compact waiting room exists only for
+       private rooms). The connection chip is passive status, not a button. */
     #netDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:4px}
     #netDot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}
-    #onlineBtn.online{background:#2ecc71 !important;color:#06130a !important}
-    #onlineOverlay{position:fixed;inset:0;background:rgba(6,6,16,.9);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:21;padding:16px}
-    #onlineOverlay.show{display:flex}
-    #onlineOverlay input,#syncCode{width:100%;margin-top:7px;padding:8px 10px;border-radius:8px;
+    #connChip{display:inline-flex;align-items:center;gap:2px;padding:3px 10px;border-radius:11px;
+      border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);font-weight:900;font-size:10px;letter-spacing:.08em}
+    #connChip.online{border-color:#2ecc71;color:#b9ffd9}
+    #modeOverlay{position:fixed;inset:0;background:rgba(6,6,16,.9);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:32;padding:16px}
+    #modeOverlay.show{display:flex}
+    #roomOverlay{position:fixed;inset:0;background:rgba(6,6,16,.9);display:none;align-items:center;justify-content:center;color:#fff;pointer-events:auto;z-index:33;padding:16px}
+    #roomOverlay.show{display:flex}
+    .ovHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .ovClose{padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto}
+    #modeOverlay input,#roomOverlay input,#syncCode{width:100%;margin-top:7px;padding:8px 10px;border-radius:8px;
       border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;font-weight:700}
-    #onlineOverlay button.row{margin-top:9px;padding:10px 14px;border-radius:10px;border:0;background:#2ecc71;color:#06130a;font-weight:900;width:100%;pointer-events:auto}
-    #onlineOverlay button.row.alt{background:#2d2d3a;color:#fff}
-    #onlineOverlay button.row.warn{background:#5a1a1a;color:#fff}
+    #modeOverlay button.row,#roomOverlay button.row{margin-top:9px;padding:10px 14px;border-radius:10px;border:0;background:#2ecc71;color:#06130a;font-weight:900;width:100%;pointer-events:auto}
+    #modeOverlay button.row.alt,#roomOverlay button.row.alt{background:#2d2d3a;color:#fff}
+    #modeOverlay button.row.warn,#roomOverlay button.row.warn{background:#5a1a1a;color:#fff}
+    #modeBackBtn{display:block;width:100%;min-height:40px;margin-top:12px;padding:10px 14px;border-radius:10px;
+      border:1px solid rgba(255,255,255,.25);background:#1a1a26;color:#fff;font-weight:900;letter-spacing:.08em;pointer-events:auto}
+    #modeStatus{margin-top:10px;font-size:11.5px;font-weight:700;color:#9fe8ff;min-height:16px;text-align:center}
+    #codeRow{background:rgba(0,0,0,.35);border-radius:10px;padding:8px 10px;margin-top:8px}
     #rosterList{margin-top:9px;font-size:12px;line-height:1.8;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px;min-height:38px}
     #chatFeed{margin-top:9px;max-height:104px;overflow:auto;font-size:11.5px;line-height:1.7;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px}
     #chatRow{display:flex;gap:6px;margin-top:7px}
@@ -427,19 +438,39 @@
         <span id="gemsEl"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-gems"/></svg> <b id="gemsVal">0</b></span>
         <span id="xpEl">XP <b id="xpVal">0</b></span>
         <span id="levelBadge">LVL 1 • Bronze</span>
-        <button id="onlineBtn"><span id="netDot"></span>ONLINE</button>
+        <span id="connChip" title="Server connection"><span id="netDot"></span><span id="connChipText">OFFLINE</span></span>
       </div>
       <div id="menuBtns">
-        <button id="playBtn">▶ PLAY</button>
-        <button id="practiceBtn">PRACTICE</button>
-        <button id="hostBtn">HOST PRIVATE</button>
+        <button id="playBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-bolt"/></svg> PLAY</button>
         <button id="garageBtn">GARAGE</button>
         <button id="settingsBtn">SETTINGS</button>
         <button id="installBtn">INSTALL</button>
       </div>
     </div>
     <div id="offlineBadge">OFFLINE — PROGRESS SAVES LOCALLY</div>
-    <div id="menuFoot">Quick match • Private rooms • Practice — pick a mode above.<br>Landscape recommended. Keyboard WASD/arrows, gamepad supported.</div>
+    <div id="menuFoot">PLAY opens the mode choice — quick match, join with code, private, practice.<br>Landscape recommended. Keyboard WASD/arrows, gamepad supported.</div>
+  </div>
+
+  <!-- ======================= MODE CHOICE (opened by PLAY) =======================
+       FIX-PROMPT Step 1: PLAY opens a simple mode choice with a back button.
+       The old lobby card (room code box, quick match, join, host, chat,
+       disconnect) is removed from the menu flow. ======================== -->
+  <div id="modeOverlay">
+    <div class="card" style="max-width:min(94vw,380px)">
+      <div class="ovHead">
+        <h2 style="font-size:16px;letter-spacing:.08em">CHOOSE A MODE</h2>
+        <button id="modeBackBtn" class="ovClose" style="min-width:0;width:auto;margin-top:0;padding:6px 10px;border:0;background:rgba(255,255,255,.08)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+      </div>
+      <button class="row" id="modeQuickBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-bolt"/></svg> QUICK MATCH — 6 PLAYERS</button>
+      <button class="row alt" id="modeCodeBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-target"/></svg> JOIN WITH CODE</button>
+      <div id="codeRow" style="display:none">
+        <input id="modeCode" maxlength="4" placeholder="ROOM CODE" style="text-transform:uppercase" />
+        <button class="row" id="modeJoinBtn" style="margin-top:8px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-check"/></svg> JOIN</button>
+      </div>
+      <button class="row alt" id="modeHostBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg> HOST PRIVATE MATCH</button>
+      <button class="row alt" id="modePracticeBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-flag"/></svg> PRACTICE — BOTS + SERVER</button>
+      <div id="modeStatus"></div>
+    </div>
   </div>
 
   <!-- ======================= RACE HUD ======================= -->
@@ -511,7 +542,7 @@
   <!-- Global chrome lives OUTSIDE #hud: the start screen hides #hud, and these
        must stay reachable from the menu (connecting / rotating / debug). -->
   <div id="coinsPop"></div>
-  <div id="center-msg"><h1>ROAD KILL</h1><p>TAP TO CONNECT — ONLINE ONLY</p><p style="font-size:11px;opacity:.7;margin-top:4px">Quick match • Private rooms • Practice</p></div>
+  <div id="center-msg"></div>
   <div id="rotatePrompt"><div class="phone"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg></div><h2>ROTATE YOUR PHONE</h2><p>ROAD KILL plays in landscape. Turn your phone sideways to continue — the game is paused.</p><button id="rotateFullscreen">GO FULLSCREEN</button></div>
   <div id="connOverlay" data-state="connecting">
     <div class="card">
@@ -522,6 +553,7 @@
       <div id="connWrap"><div id="connCount">60s</div><div id="connTrack"><div id="connFill"></div></div></div>
       <div id="connAttempts"></div>
       <button id="connRetryBtn">RETRY NOW</button>
+      <button id="connBackBtn" style="display:none;margin-top:8px;padding:9px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#1a1a26;color:#fff;font-weight:900;letter-spacing:.08em;pointer-events:auto">BACK TO MENU</button>
     </div>
   </div>
   <div id="debugPanel">debug</div>
@@ -604,35 +636,29 @@
       <div id="dailyInfo" style="font-size:11px;opacity:.75;margin-top:10px"></div>
       <div id="seasonInfo" style="font-size:11px;opacity:.75;margin-top:6px"></div>
       <button class="row" id="claimSeasonBtn">CLAIM SEASON REWARD</button>
+      <button class="row alt" id="boardBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-trophy"/></svg> LEADERBOARD</button>
+      <div id="boardList" style="display:none;margin-top:8px;font-size:11px;line-height:1.7;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px"></div>
       <button class="row" id="resetProgressBtn" style="background:#5a1a1a">RESET PROGRESS</button>
     </div>
   </div>
-  <div id="onlineOverlay">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h2 style="font-size:16px;letter-spacing:.08em">ROAD KILL LOBBY</h2>
-        <button id="onlineClose" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+  <div id="roomOverlay">
+    <div class="card" style="max-width:min(94vw,430px)">
+      <div class="ovHead">
+        <h2 style="font-size:16px;letter-spacing:.08em" id="roomTitle">WAITING ROOM</h2>
+        <button id="roomClose" class="ovClose"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
       </div>
       <p id="netStatus" style="font-size:12px;opacity:.7;margin-top:6px">Connecting…</p>
       <p id="tagLine" style="font-size:13px;font-weight:900;letter-spacing:.08em;margin-top:6px">YOUR TAG: <span id="tagVal">…</span></p>
-      <input id="netCode" maxlength="4" placeholder="Room code (have an invite? paste it)" style="text-transform:uppercase" />
-      <button class="row" id="quickMatchBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-bolt"/></svg> QUICK MATCH (6P)</button>
-      <button class="row alt" id="joinCodeBtn">JOIN ROOM CODE</button>
-      <button class="row alt" id="hostPrivateBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg> HOST PRIVATE MATCH</button>
-      <div id="lobbyPanel" style="display:none;margin-top:10px;background:rgba(0,0,0,.35);border-radius:8px;padding:8px 10px">
-        <div id="lobbyInfo" style="font-size:12px;font-weight:900"></div>
-        <div id="inviteRow" style="display:none;margin-top:6px;font-size:11px">
-          INVITE: <code id="inviteLink" style="word-break:break-all"></code>
-          <button id="copyInviteBtn" style="margin-top:6px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">COPY LINK</button>
-        </div>
-        <div id="rosterList">No lobby yet.</div>
-        <label id="botsRow" style="display:none;font-size:12px;font-weight:700;margin-top:8px;gap:8px;align-items:center"><input type="checkbox" id="botsToggle" checked style="width:16px;height:16px" /> Fill empty seats with bots</label>
-        <button class="row" id="startBtn" style="display:none;background:#ffcc00;color:#111">START RACE</button>
+      <div id="lobbyInfo" style="margin-top:8px;font-size:12px;font-weight:900"></div>
+      <div id="inviteRow" style="display:none;margin-top:6px;font-size:11px">
+        INVITE: <code id="inviteLink" style="word-break:break-all"></code>
+        <button id="copyInviteBtn" style="margin-top:6px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-weight:800;pointer-events:auto">COPY LINK</button>
       </div>
+      <div id="rosterList">No lobby yet.</div>
+      <label id="botsRow" style="display:none;font-size:12px;font-weight:700;margin-top:8px;gap:8px;align-items:center"><input type="checkbox" id="botsToggle" checked style="width:16px;height:16px" /> Fill empty seats with bots</label>
+      <button class="row" id="startBtn" style="display:none;background:#ffcc00;color:#111">START RACE</button>
       <div id="chatFeed"></div>
       <div id="chatRow"></div>
-      <button class="row alt" id="boardBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-trophy"/></svg> LEADERBOARD</button>
-      <button class="row warn" id="disconnectBtn">DISCONNECT</button>
       <p style="font-size:10px;opacity:.5;margin-top:8px">Online only. Humans get server tags (RK-XXXX); bots show <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-bot"/></svg> in color. No bots unless the wait fills or the host adds them.</p>
     </div>
   </div>
