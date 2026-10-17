@@ -1,3 +1,4 @@
+import { icon } from './icons.js';
 // vehicles.js — Phase 9 catalog + shop logic. Pure JS (no THREE, no DOM).
 // Prices/flags live in shop-config.json (game root). This module never reads
 // the file itself so it runs in browser (Vite JSON import), Node sims, and
@@ -59,7 +60,7 @@ export function maxUpgradeLevel(line) { return shop().upgrades[line].levels.leng
 
 export function priceText(item) {
   if (!item || item.price === 0 || item.free) return 'FREE';
-  return item.currency === 'gems' ? `${item.price} 💎` : `$${item.price}`;
+  return item.currency === 'gems' ? `${item.price} ${icon('gems')}` : `$${item.price}`;
 }
 function canAfford(profile, price, currency) {
   return currency === 'gems' ? profile.gems >= price : profile.coins >= price;

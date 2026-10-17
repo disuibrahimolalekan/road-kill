@@ -29,6 +29,7 @@ import {
   mountableWeapons, migrateShop, CLASSES, CLASS_NAMES, shopWeapon
 } from './vehicles.js';
 import { sfx, SOUND_HOOKS } from './sound.js';
+import { icon, esc } from './icons.js';
 setShopConfig(SHOP_CONFIG);
 import {
   FUEL_MAX, FUEL_START, fuelDrain, perfFactor,
@@ -672,7 +673,7 @@ function refreshEconHUD(){
 }
 function popCoins(text, cls=''){
   if(!coinsPopEl) return;
-  const d=document.createElement('div'); d.className='pop '+cls; d.textContent=text; coinsPopEl.appendChild(d);
+  const d=document.createElement('div'); d.className='pop '+cls; d.innerHTML=text;   // icons are markup now coinsPopEl.appendChild(d);
   setTimeout(()=>d.remove(), 900);
 }
 let coinsTokens=[]; // economy token state
@@ -1079,7 +1080,7 @@ function renderRoster(roster) {
   if (!roster || !roster.length) { rosterList.textContent = 'No lobby yet.'; return; }
   renderRosterCache = roster;
   // Phase 13: tags for humans, never usernames.
-  rosterList.innerHTML = roster.map((r) => `<div>${(net && r.id === net.clientId) ? '⭐ ' : ''}👤 ${r.tag || r.id} <span style="opacity:.5">${r.id}</span></div>`).join('') || 'Waiting…';
+  rosterList.innerHTML = roster.map((r) => `<div>${(net && r.id === net.clientId) ? icon('star') + ' ' : ''}${icon('person')} ${esc(r.tag || r.id)} <span style="opacity:.5">${esc(r.id)}</span></div>`).join('') || 'Waiting…';
   const n = roster.length;
   if (lobbyInfo) lobbyInfo.textContent = isHost
     ? `PRIVATE ROOM ${net ? net.roomCode : ''} — ${n}/6 racers`
@@ -1137,21 +1138,21 @@ function showConnState(state, detail){
   if (connAttempts) connAttempts.textContent = connAttemptNo > 1 ? `ATTEMPT ${connAttemptNo}` : '';
   if (connSpin) connSpin.style.display = (state === 'failed' || state === 'waking') ? 'none' : 'block';
   if (state === 'connecting') {
-    if (connBadge) connBadge.textContent = '🔄';
+    if (connBadge) connBadge.innerHTML = icon('spinner', 'spin');
     connTitle.textContent = 'CONNECTING';
     connSub.textContent = detail || 'Finding the fastest server…';
     if (connCount) connCount.textContent = '';
   } else if (state === 'retry') {
-    if (connBadge) connBadge.textContent = '🔁';
+    if (connBadge) connBadge.innerHTML = icon('auto');
     connTitle.textContent = 'RECONNECTING';
     connSub.textContent = detail || 'Trying again — holding your spot in the lobby.';
     if (connCount) connCount.textContent = '';
   } else if (state === 'waking') {
-    if (connBadge) connBadge.textContent = '💤';
+    if (connBadge) connBadge.innerHTML = icon('zzz');
     connTitle.textContent = 'SERVER WAKING UP';
     connSub.textContent = 'Free server sleeps when idle — a cold boot can take up to a minute.';
   } else if (state === 'failed') {
-    if (connBadge) connBadge.textContent = '⚠️';
+    if (connBadge) connBadge.innerHTML = icon('warn');
     connTitle.textContent = 'CONNECTION FAILED';
     connSub.textContent = detail || 'Could not reach the server. Check your connection and retry.';
     if (connCount) connCount.textContent = '';
@@ -1295,7 +1296,7 @@ function wireNet(n) {
     if (m.kind === 'upgrade' && r.ok) applyVehicleStats(player, true);
     refreshEconHUD(); persistProfile(true); renderGarage();
     sfx('pickup');
-    popCoins(r.ok ? 'PURCHASED ✓' : `SHOP: ${r.reason}`,'xp');
+    popCoins(r.ok ? `${icon('check')} PURCHASED` : `SHOP: ${esc(r.reason)}`,'xp');
   };
   // Phase 12: server-owned revive verdict (gems deducted server-side).
   n.onReviveOk = (m) => {
@@ -1303,7 +1304,7 @@ function wireNet(n) {
     if(!m.ok){ popCoins(`REVIVE: ${m.reason || 'denied'}`,''); showReviveOverlay(); return; }
     if(typeof m.gems === 'number') profile.gems = m.gems;
     refreshEconHUD(); persistProfile(true);
-    popCoins(`-${m.cost} 💎 (server)`,'gem');
+    popCoins(`-${m.cost} ${icon('gems')} (server)`,'gem');
     applyPlayerRevive();
   };
   // Phase 13 race start: countdown, then local grid sized by the server.
@@ -1356,8 +1357,8 @@ function wireNet(n) {
   };
   n.onBoard = (m) => {
     if (!rosterList) return;
-    const rows = (m.entries || []).map((e, i) => `<div>${i + 1}. ${e.name} — ${e.xp}XP · ${e.wins}W/${e.races}</div>`).join('');
-    rosterList.innerHTML = `<b>🏆 LEADERBOARD</b><br>${rows || 'No entries yet — finish a race!'}`;
+    const rows = (m.entries || []).map((e, i) => `<div>${i + 1}. ${esc(e.name)} — ${e.xp}XP · ${e.wins}W/${e.races}</div>`).join('');
+    rosterList.innerHTML = `<b>${icon('trophy')} LEADERBOARD</b><br>${rows || 'No entries yet — finish a race!'}`;
   };
   n.onHit = (m) => {
     // Server-side hit registration is authoritative: trust its hp.
@@ -1392,7 +1393,7 @@ function pushKillFeedSilent(attackerId, targetId, weapon) {
       return id;
     };
     const div = document.createElement('div'); div.className = 'kill';
-    div.textContent = `👤 ${tagOf(attackerId)} → ${tagOf(targetId)} (${weapon || 'hit'})`;
+    div.innerHTML = `${icon('person')} ${esc(tagOf(attackerId))} → ${esc(tagOf(targetId))} (${esc(weapon || 'hit')})`;
     killFeedEl.appendChild(div);
     setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 400); }, 2200);
   } catch {}
@@ -1441,7 +1442,7 @@ if (disconnectBtn) disconnectBtn.addEventListener('click', () => {
 const boardBtn = document.getElementById('boardBtn');
 if (boardBtn) boardBtn.addEventListener('click', () => {
   if (net && net.online) net.requestBoard();
-  else if (rosterList) rosterList.innerHTML = '<b>🏆 LEADERBOARD</b><br>Connect online to see the board.';
+  else if (rosterList) rosterList.innerHTML = `<b>${icon('trophy')} LEADERBOARD</b><br>Connect online to see the board.`;
 });
 const syncCodeEl = document.getElementById('syncCode');
 const exportBtn = document.getElementById('exportBtn');
@@ -1479,18 +1480,18 @@ function renderLiveops() {
   if (trackRow) [...trackRow.children].forEach((x, j) => { x.style.background = j === currentTrackIdx ? '#ffcc00' : 'rgba(255,255,255,.08)'; x.style.color = j === currentTrackIdx ? '#111' : '#fff'; });
   if (dailyInfo) {
     const d = getDailyState();
-    dailyInfo.textContent = `📅 ${d.challenge.title} — ${d.claimed ? 'claimed today ✓' : 'unclaimed (finish a race!)'}`;
+    dailyInfo.innerHTML = `${icon('calendar')} ${esc(d.challenge.title)} — ${d.claimed ? `claimed today ${icon('check')}` : 'unclaimed (finish a race!)'}`;
   }
   if (seasonInfo) {
     const s = seasonProgress(profile);
-    seasonInfo.textContent = `🏁 Season ${SEASON_ID}: ${s.pts} pts — next: ${s.next ? s.next.label : 'all claimed ✓'}`;
+    seasonInfo.innerHTML = `${icon('flag')} Season ${SEASON_ID}: ${s.pts} pts — next: ${s.next ? esc(s.next.label) : `all claimed ${icon('check')}`}`;
   }
 }
 if (claimSeasonBtn) claimSeasonBtn.addEventListener('click', () => {
   const s = seasonProgress(profile);
   if (!s.next) { popCoins('SEASON COMPLETE'); return; }
   const r = claimSeasonReward(profile, s.next.points);
-  if (r.ok) { refreshEconHUD(); persistProfile(true); popCoins(`+${r.gems} 💎 ${r.label}`, 'gem'); renderLiveops(); }
+  if (r.ok) { refreshEconHUD(); persistProfile(true); popCoins(`+${r.gems} ${icon('gems')} ${esc(r.label)}`, 'gem'); renderLiveops(); }
   else popCoins('NOT ENOUGH PTS');
 });
 setInterval(() => {
@@ -1554,7 +1555,7 @@ function pickupColor(type){
 }
 function pickupIcon(type){
   if(WEAPON_DEFS[type]) return WEAPON_DEFS[type].icon;
-  return { fuel:'⛽', ammo:'📦' }[type] || '❔';
+  return { fuel:icon('fuel'), ammo:icon('ammo') }[type] || icon('question');
 }
 function rollPhase8Pickup(){
   const r = Math.random();
@@ -1879,7 +1880,7 @@ const likeBtn = document.getElementById('likeBtn');
 function updateLikeBtn(){
   if(!likeBtn) return;
   if(likeTarget && started && !paused && !finished){
-    likeBtn.textContent = `♥ LIKE ${likeTarget.name}`;
+    likeBtn.innerHTML = `${icon('heart')} LIKE ${esc(likeTarget.name)}`;
     likeBtn.classList.add('show');
   } else likeBtn.classList.remove('show');
 }
@@ -1888,7 +1889,7 @@ if(likeBtn) likeBtn.addEventListener('click', (e)=>{
   if(!likeTarget) return;
   sendBannerEvent('like', likeTarget.id);
   likeTarget.likeCd = 60;
-  popCoins(`♥ ${likeTarget.name} LIKED!`, 'xp'); sfx('ui');
+  popCoins(`${icon('heart')} ${esc(likeTarget.name)} LIKED!`, 'xp'); sfx('ui');
   likeTarget = null; updateLikeBtn();
 });
 function placeholderBoard(name, color, big) {
@@ -2133,11 +2134,11 @@ function spawnHitSpark(pos){
 function pushKillFeed(killerIdx, victimIdx, weapon){
   const killer=cars[killerIdx], victim=cars[victimIdx];
   const div=document.createElement('div'); div.className='kill';
-  const wIcon= WEAPON_DEFS[weapon]?.icon || '💥';
-  // Phase 13: your tag, or 🤖 BOT-n for bots.
-  const killerName = killer.isPlayer?('YOU ' + (profile.tag || '')):`🤖 BOT-${killerIdx}`;
-  const victimName = victim.isPlayer?('YOU ' + (profile.tag || '')):`🤖 BOT-${victimIdx}`;
-  div.textContent=`${wIcon} ${killerName} → ${victimName} ${victim.health?`(${weapon})`:''}`;
+  const wIcon= WEAPON_DEFS[weapon] ? icon(WEAPON_DEFS[weapon].icon) : icon('target');
+  // Phase 13: your tag, or the bot icon + BOT-n for bots.
+  const killerName = killer.isPlayer?('YOU ' + esc(profile.tag || '')):`${icon('bot')} BOT-${killerIdx}`;
+  const victimName = victim.isPlayer?('YOU ' + esc(profile.tag || '')):`${icon('bot')} BOT-${victimIdx}`;
+  div.innerHTML=`${wIcon} ${killerName} → ${victimName} ${victim.health?`(${esc(weapon)})`:''}`;
   div.style.borderLeftColor = killer.isPlayer?'#2ecc71':'#ff3344';
   killFeedEl.appendChild(div);
   setTimeout(()=>{ div.style.opacity='0'; div.style.transform='translateX(20px)'; div.style.transition='all .4s'; setTimeout(()=>div.remove(),400); }, 2200);
@@ -2236,7 +2237,7 @@ function setTODMode(mode){
   try { settings = saveSettings({ tod: mode }); } catch {}
   if (setTOD) setTOD.value = mode;
   if (mode !== 'auto') applyTimeOfDay(mode === 'day' ? 0.15 : mode === 'dusk' ? 0.62 : 0.85);
-  if (todBtn) todBtn.textContent = mode === 'day' ? '☀️' : mode === 'dusk' ? '🌇' : mode === 'auto' ? '🔁' : '🌙';
+  if (todBtn) todBtn.innerHTML = mode === 'day' ? icon('sun') : mode === 'dusk' ? icon('dusk') : mode === 'auto' ? icon('auto') : icon('moon');
 }
 addEventListener('keydown',e=>{
   if (e.key.toLowerCase()==='c' || e.key.toLowerCase()==='k') tryPlayerJump();
@@ -2249,7 +2250,7 @@ function cyclePlayerMount(){
   if(!started || paused || finished || player.out || spectating) return;
   if(!player.cstate.mounts || player.cstate.mounts.length<2){ popCoins('ONE SLOT — 2-slot rides hold more',''); return; }
   const m = cycleMount(player.cstate);
-  if(m){ const def = WEAPON_DEFS[m.type]; popCoins(`${def.icon} ${def.label} [${player.cstate.mountIdx+1}/${player.cstate.mounts.length}]`,'xp'); sfx('ui'); }
+  if(m){ const def = WEAPON_DEFS[m.type]; popCoins(`${icon(def.icon)} ${esc(def.label)} [${player.cstate.mountIdx+1}/${player.cstate.mounts.length}]`,'xp'); sfx('ui'); }
 }
 if(weaponHUD){ weaponHUD.style.pointerEvents='auto'; weaponHUD.style.cursor='pointer'; weaponHUD.title='Tap to switch weapon mount'; weaponHUD.addEventListener('click', cyclePlayerMount); }
 if (jumpBtn) bindHold(jumpBtn, ()=>{ tryPlayerJump(); }, ()=>{});
@@ -2725,7 +2726,7 @@ function tickProjectiles(dt){
         if(p.empTime && !c.cstate.wrecked){
           c.cstate.disabled=Math.max(c.cstate.disabled, p.empTime);
           const zap=new THREE.Mesh(new THREE.RingGeometry(0.5,1.0,14), new THREE.MeshBasicMaterial({color:0xffe14d, transparent:true, opacity:0.9, side:THREE.DoubleSide})); zap.rotation.x=-Math.PI/2; zap.position.set(c.pos.x,0.1,c.pos.z); scene.add(zap); effects.push({mesh:zap, vel:new THREE.Vector3(), life:0.5, maxLife:0.5, kind:'ring', scale:1.4});
-          if(c.isPlayer) popCoins('⚡ EMP ZAPPED!', '');
+          if(c.isPlayer) popCoins(`${icon('bolt')} EMP ZAPPED!`, '');
         }
         if(p.splash){
           for(const t of cars){
@@ -2847,7 +2848,7 @@ function showReviveOverlay(){
     return;
   } else {
     reviveTitleEl.textContent='WRECKED!';
-    reviveCostEl.innerHTML=`💎 ${cost} <small>GEMS</small>`;
+    reviveCostEl.innerHTML=`${icon('gems')} ${cost} <small>GEMS</small>`;
     const afford = profile.gems >= cost;
     reviveHintEl.textContent = afford ? `You have ${profile.gems} gems.` : `Need ${cost} gems — you have ${profile.gems}.`;
     reviveBtn.disabled=!afford;
@@ -2865,9 +2866,9 @@ function goOutOfFuel(c){
 }
 function showOutOverlay(reason){
   hideReviveOverlay();
-  if(outTitle) outTitle.textContent = reason==='fuel' ? 'OUT OF FUEL ⛽' : 'WRECKED OUT 💀';
-  if(outSub) outSub.textContent = reason==='fuel'
-    ? 'You ran dry. Manage throttle, grab ⛽ cans, bank the +16/lap pit bonus.'
+  if(outTitle) outTitle.innerHTML = reason==='fuel' ? `OUT OF FUEL ${icon('fuel')}` : `WRECKED OUT ${icon('skull')}`;
+  if(outSub) outSub.innerHTML = reason==='fuel'
+    ? `You ran dry. Manage throttle, grab ${icon('fuel')} cans, bank the +16/lap pit bonus.`
     : 'Three revives used (1 → 5 → 30 gems). The race goes on without you.';
   if(outOverlay) outOverlay.classList.add('show');
   paused=true;
@@ -2900,7 +2901,7 @@ function doPlayerRevive(){
   }
   const res=payRevive(profile, cs.revivesUsed);
   if(!res.ok) return;
-  refreshEconHUD(); popCoins(`-${res.cost} 💎`,'gem');
+  refreshEconHUD(); popCoins(`-${res.cost} ${icon('gems')}`,'gem');
   applyPlayerRevive();
 }
 function applyPlayerRevive(){
@@ -2962,7 +2963,7 @@ function shopBuy(kind, item, level, vehicle, applyLocal){
     return;
   }
   const r = applyLocal();
-  if(r.ok){ refreshEconHUD(); persistProfile(true); sfx('pickup'); popCoins('PURCHASED ✓','xp'); }
+  if(r.ok){ refreshEconHUD(); persistProfile(true); sfx('pickup'); popCoins(`${icon('check')} PURCHASED`,'xp'); }
   else popCoins(`SHOP: ${r.reason==='funds'?'NEED FUNDS':'UNAVAILABLE'}`,'');
   renderGarage();
 }
@@ -2990,7 +2991,7 @@ function renderGarage(){
   garageGrid.appendChild(body);
   const mk=(html)=>{ const d=document.createElement('div'); d.innerHTML=html; return d; };
   const btn=(parent,label,cls,disabled,fn)=>{
-    const b=document.createElement('button'); b.textContent=label; b.className=cls; b.disabled=!!disabled;
+    const b=document.createElement('button'); b.innerHTML=label;   // labels may carry an icon b.className=cls; b.disabled=!!disabled;
     if(fn) b.addEventListener('click',(e)=>{ e.stopPropagation(); sfx('ui'); fn(); });
     parent.appendChild(b); return b;
   };
@@ -3002,7 +3003,7 @@ function renderGarage(){
       const equipped=profile.equippedSkin===skin.id;
       const div=document.createElement('div'); div.className='skin'+(owned?' owned':'')+(equipped?' equipped':'');
       const hex='#'+skin.color.toString(16).padStart(6,'0');
-      div.innerHTML=`<div class="sw" style="background:${hex}"></div><b>${skin.name}</b><div style="font-size:10px;opacity:.6">${skin.price===0?'FREE':skin.price+' 💰'}</div>`;
+      div.innerHTML=`<div class="sw" style="background:${hex}"></div><b>${skin.name}</b><div style="font-size:10px;opacity:.6">${skin.price===0?'FREE':skin.price+' '+icon('money')}</div>`;
       if(equipped){ btn(div,'EQUIPPED','equip',true); }
       else if(owned){ btn(div,'EQUIP','equip',false,()=>{ const r=equipSkin(profile, skin.id); if(r.ok){ refreshEconHUD(); persistProfile(true); renderGarage(); player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); player.color=skin.color; } }); }
       else { btn(div, skin.price>profile.coins? `NEED $${skin.price}` : `BUY $${skin.price}`,'buy',profile.coins<skin.price,()=>{ const r=buySkin(profile, skin.id); if(r.ok){ equipSkin(profile, skin.id); refreshEconHUD(); persistProfile(true); popCoins(`BOUGHT ${skin.name}`); renderGarage(); player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); } else { popCoins('NOT ENOUGH CASH'); } }); }
@@ -3017,7 +3018,7 @@ function renderGarage(){
         const equipped=profile.equippedVehicle===v.id;
         const st=vehicleStats(v.id, upgLevels(profile, v.id));
         const div=document.createElement('div'); div.className='skin'+(owned?' owned':'')+(equipped?' equipped':'');
-        div.innerHTML=`<b>${v.name}</b> <span style="font-size:9px;opacity:.6">${v.free?'FREE ITEM':(v.currency==='gems'?'💎 PAID':'💰 PAID')}</span><div style="font-size:10px;opacity:.65">${v.desc||''}</div>`
+        div.innerHTML=`<b>${v.name}</b> <span style="font-size:9px;opacity:.6">${v.free?'FREE ITEM':(v.currency==='gems'?icon('gems')+' PAID':icon('money')+' PAID')}</span><div style="font-size:10px;opacity:.65">${v.desc||''}</div>`
           + statBar('TOP', st.top, 50) + statBar('ACC', st.accel, 1.4) + statBar('HND', st.handling, 1.5) + statBar('HP', st.hp, 260) + statBar('FUEL', st.fuel, 120)
           + `<div style="font-size:10px;opacity:.7;margin-top:4px">SLOTS ${st.slots} • ${priceText(v)}</div>`;
         if(equipped) btn(div,'EQUIPPED','equip',true);
@@ -3047,7 +3048,7 @@ function renderGarage(){
       const owned=profile.weapons.includes(w.id);
       const def=WEAPON_DEFS[w.id];
       const div=document.createElement('div'); div.className='skin'+(owned?' owned':'');
-      div.innerHTML=`<b>${def?def.icon+' ':''}${w.name}</b> <span style="font-size:9px;opacity:.6">${w.free?'FREE ITEM':(w.currency==='gems'?'💎 PAID':'💰 PAID')}</span><div style="font-size:10px;opacity:.65">${w.desc||''} • ${w.raceAmmo}/race</div>`;
+      div.innerHTML=`<b>${def?icon(def.icon)+' ':''}${w.name}</b> <span style="font-size:9px;opacity:.6">${w.free?'FREE ITEM':(w.currency==='gems'?icon('gems')+' PAID':icon('money')+' PAID')}</span><div style="font-size:10px;opacity:.65">${w.desc||''} • ${w.raceAmmo}/race</div>`;
       if(owned){
         const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;margin-top:8px';
         btn(row,'SLOT 1','equip',profile.mounts.slot1===w.id,()=>{ const r=setMount(profile,1,w.id); if(r.ok){ refreshEconHUD(); persistProfile(true); resetMounts(player.cstate, mountsFor(player)); renderGarage(); } });
@@ -3139,14 +3140,14 @@ function updateHUD(){
   else if(hitFlashTimer<=0 && hp>=30) damageVignette.style.boxShadow='inset 0 0 120px rgba(255,0,0,0)';
   let html=''; order.forEach((c,idx)=>{
     const isMe=c.isPlayer; const hp2=Math.round(c.cstate.health);
-    const icon=c.out?'🏁':c.cstate.wrecked?'💀': (c.cstate.weapon? WEAPON_DEFS[c.cstate.weapon.type].icon : '🔫');
-    // Phase 13: humans = server tags, bots = 🤖 in their own color. YOU = your tag.
+    const ic=c.out?icon('flag'):c.cstate.wrecked?icon('skull'): (c.cstate.weapon? icon(WEAPON_DEFS[c.cstate.weapon.type].icon) : icon('gun'));
+    // Phase 13: humans = server tags, bots = the bot icon in their own color. YOU = your tag.
     let label;
     if(isMe) label = 'YOU ' + (profile.tag || '');
-    else if(c.netRemote) label = '👤 ' + (c.netName || c.netId || 'Rival');
-    else { const hex='#'+(c.color||0xffffff).toString(16).padStart(6,'0'); label = `<span style="color:${hex}">🤖 BOT-${c.idx}</span>`; }
-    const stat=c.out?'OUT':(c.cstate.wrecked?'WRECKED':`${c.lap+1}/${TOTAL_LAPS} ${hp2}% ⛽${Math.round(c.fuel)}`);
-    html+=`<div style="${isMe?'color:#ffcc00;font-weight:900':''}">${idx+1}. ${label} ${stat} ${icon}</div>`;
+    else if(c.netRemote) label = icon('person') + ' ' + esc(c.netName || c.netId || 'Rival');
+    else { const hex='#'+(c.color||0xffffff).toString(16).padStart(6,'0'); label = `<span style="color:${hex}">${icon('bot')} BOT-${c.idx}</span>`; }
+    const stat=c.out?'OUT':(c.cstate.wrecked?'WRECKED':`${c.lap+1}/${TOTAL_LAPS} ${hp2}% ${icon('fuel')}${Math.round(c.fuel)}`);
+    html+=`<div style="${isMe?'color:#ffcc00;font-weight:900':''}">${idx+1}. ${label} ${stat} ${ic}</div>`;
   });
   // STEP 1: race order is a collapsed tag; this fills the expandable body only,
   // so the "RACE P3" header stays put when it collapses.
@@ -3163,11 +3164,11 @@ function updateHUD(){
     weaponHUD.classList.remove('empty');
     const mdef=WEAPON_DEFS[player.cstate.mounted.type] || WEAPON_DEFS.mg;
     const n=player.cstate.mounts.length;
-    weaponIcon.textContent=mdef.icon; weaponName.textContent=(player.cstate.disabled>0?'⚡ ':'')+mdef.label+(n>1?` [${player.cstate.mountIdx+1}/${n}]`:'');
+    weaponIcon.innerHTML=icon(mdef.icon); weaponName.innerHTML=(player.cstate.disabled>0?icon('bolt')+' ':'')+esc(mdef.label)+(n>1?` [${player.cstate.mountIdx+1}/${n}]`:'');
     weaponAmmo.textContent=`${player.cstate.mounted.ammo} reserve`;
     weaponTimerFill.style.width='100%'; weaponTimerFill.style.background= player.cstate.disabled>0 ? 'linear-gradient(90deg,#ffe14d,#ff9a00)' : 'linear-gradient(90deg,#2de2ff,#2d7dff)';
   }
-  else { weaponHUD.classList.remove('empty'); const def=WEAPON_DEFS[w.type]; weaponIcon.textContent=def.icon; weaponName.textContent=def.label; weaponAmmo.textContent=w.ammo>0? `${w.ammo} • ${w.ttl.toFixed(1)}s` : `— • ${w.ttl.toFixed(1)}s`; const pct=Math.max(0, w.ttl/def.ttl*100); weaponTimerFill.style.width=pct+'%'; weaponTimerFill.style.background= pct<30?'linear-gradient(90deg,#ff3344,#ff6a00)':'linear-gradient(90deg,#ffcc00,#ff6a00)'; }
+  else { weaponHUD.classList.remove('empty'); const def=WEAPON_DEFS[w.type]; weaponIcon.innerHTML=icon(def.icon); weaponName.textContent=def.label; weaponAmmo.textContent=w.ammo>0? `${w.ammo} • ${w.ttl.toFixed(1)}s` : `— • ${w.ttl.toFixed(1)}s`; const pct=Math.max(0, w.ttl/def.ttl*100); weaponTimerFill.style.width=pct+'%'; weaponTimerFill.style.background= pct<30?'linear-gradient(90deg,#ff3344,#ff6a00)':'linear-gradient(90deg,#ffcc00,#ff6a00)'; }
   // STEP 1: fire is an art pad now, so advertise the armed weapon on its label
   // and tint it instead of rewriting its text content.
   if(fireBtn){
@@ -3181,7 +3182,7 @@ function updateHUD(){
     fuelFill.style.width=fp+'%';
     fuelFill.className=fp<22?'low':'';
   }
-  if(!player.out && started && player.fuel<22 && !lowFuelWarned){ lowFuelWarned=true; popCoins('LOW FUEL — FIND ⛽',''); }
+  if(!player.out && started && player.fuel<22 && !lowFuelWarned){ lowFuelWarned=true; popCoins(`LOW FUEL — FIND ${icon('fuel')}`,''); }
 }
 
 function drawMinimap(){

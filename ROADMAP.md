@@ -355,6 +355,56 @@ Connection states: **4/4 distinct** (different backdrop, border, icon, title col
 
 **Next:** Step 2 — awaiting go-ahead.
 
+## TAKEOVER STEP 1b — No emoji anywhere, real icons only ✅ DONE — 2026-10-17
+
+**Request:** *"I don't want to see emojis on any part of the game, use real icons."*
+
+### Why SVG and not a second PNG set
+An emoji is a **font**, not an image: `U+1F48E` is a different drawing on Android, iOS, Windows
+and Linux, and on a bare Linux box it is a tofu box. So the fix is a hand-built icon set that
+needs no font at all and stays crisp at any pixel ratio.
+
+- **`tools/build-icons.py`** owns the **36 icon definitions** and rewrites the sprite block between
+  `ICONS:START` / `ICONS:END` markers in `index.html` — edit the script, not the markup. It then
+  **audits every reference**: literal `<use href="#i-…">`, `icon('…')` calls in JS, and
+  `icon:'…'` values in `combat.js` (which are only reachable through `icon(def.icon)`).
+  A typo fails the build instead of rendering a blank icon. **Result: all 36 icons referenced,
+  47 call sites, zero unresolved.**
+- Set: heart, gems, coins, money, fuel, ammo, question, check, close, target, sun/moon/dusk,
+  spinner/auto/zzz/warn, eye, phone, lock, trophy, calendar, person, star, bot, flag, skull, bolt
+  + the eight weapons (rocket, gun, mine, shield, plasma, railgun, emp, swarm).
+- **`src/icons.js`** — `icon(name, cls)` returns the markup, `esc()` escapes player tags. `esc()`
+  matters because showing an icon forced several `textContent` calls to become `innerHTML`, and
+  those strings interpolate **player-supplied** tags/names/ids.
+- **76 conversion sites:** `index.html` 19, `src/main.js` 44, `src/combat.js` 8, `src/vehicles.js` 1.
+
+### Two real defects the emoji had been hiding
+1. **The HUD never set a CSS `color`.** `html,body` set a dark background but no colour, so every
+   element that never declared one inherited the UA default **black** — invisible on the dark
+   panels (`#todBtn`'s moon, the whole weapon row). The emoji ignored `color`, so this had never
+   shown. Fixed at the root with `color:#eef4ff` on `html,body`.
+2. **A local `const icon = …` in the race-order block would have shadowed the imported helper.**
+   Renamed to `ic`.
+
+### Verification — `sim/no-emoji-check.mjs`
+Scans **10 screens** (start menu, race HUD expanded + collapsed, all four connection states,
+settings, garage, lobby) for three things: emoji in any *visible* text node; `<use>` whose
+symbol is missing or zero-sized; and icons whose computed `color` is too dark to see against
+these dark surfaces.
+
+**Result: 0 emoji, 0 broken, 0 invisible icons, 0 app console errors.** Plus `vite build` passes
+and `tools/build-icons.py` reports all 36 resolving. Repo-wide scan of `index.html` + `src/*.js`
+— including comments — is now **0 emoji**.
+
+> Harness note: two "bugs" turned out to be my own measurement, not the game — a `grep -v WebGL`
+> was hiding the debug-panel line (its content contains `WEBGL`), and the white minimap / stuck
+> `-- FPS` in screenshots was the script shooting **before boot finished** (SwiftShader shader
+> compile takes ~4s and `requestAnimationFrame` only registers afterwards). The harness now waits
+> on `__rkBooted && __rkFrames > 30`, and `#minimap canvas` gained a CSS `#0a0f18` base so a
+> not-yet-drawn minimap can never flash the canvas behind it.
+
+**Next:** Step 2 — awaiting go-ahead.
+
 ## PHASE 14 — Premium Economy ⏸ PAUSED (Prompt 3 orders Phase 16 first)
 Work stopped mid-build (coins rename done in working tree, gold feats/shop not built). Resume after Prompt 3 Steps 1–3.
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.

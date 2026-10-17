@@ -7,7 +7,7 @@ export const FUEL_START = 60;
 export const FUEL_BASE = 0.55;      // engine idling/driving
 export const FUEL_THROTTLE = 0.45;  // extra at full throttle
 export const FUEL_BOOST = 2.3;      // extra while boosting
-export const FUEL_PICKUP = 20;      // ⛽ can bonus
+export const FUEL_PICKUP = 20;      // fuel-can bonus
 export const FUEL_PER_LAP = 16;     // pit-stop bonus per completed lap
 export const FUEL_REVIVE = 45;      // fuel granted on gem revive
 
@@ -31,7 +31,7 @@ export function perfFactor(fuel, hp) {
 export const MOUNTED_START_AMMO = 150;
 export const MOUNTED_MAX_AMMO = 300;
 export const MOUNTED_REVIVE_AMMO = 120;
-export const AMMO_PICKUP = 60; // 📦 bonus
+export const AMMO_PICKUP = 60; // ammo-box bonus
 
 // Roadblocks. destructible: weapons break them. heavy: costs lots of ammo.
 // jumpable: Phase 7 jump clears them when airborne high enough.

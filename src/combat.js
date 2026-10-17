@@ -4,50 +4,50 @@ export const CAR_MAX_HP = 100;
 
 export const WEAPON_DEFS = {
   rocket: {
-    id:'rocket', label:'ROCKET', icon:'🚀',
+    id:'rocket', label:'ROCKET', icon:'rocket',
     ammo: 5, damage: 34, speed: 68, cooldown: 0.48, lifetime: 3.2, radius: 0.7,
     ttl: 12, // weapon expires after 12s
     color: 0xff3b30,
   },
   mg: {
-    id:'mg', label:'M-GUN', icon:'🔫',
+    id:'mg', label:'M-GUN', icon:'gun',
     ammo: 70, damage: 8, speed: 108, cooldown: 0.092, lifetime: 1.35, radius: 0.35,
     ttl: 10, spread: 0.045,
     color: 0xffcc00,
   },
   mine: {
-    id:'mine', label:'MINE', icon:'💣',
+    id:'mine', label:'MINE', icon:'mine',
     ammo: 3, damage: 54, cooldown: 0.72, lifetime: 22, radius: 0.9,
     ttl: 14, triggerRadius: 4.2, explosionRadius: 11,
     color: 0x8a2be2,
   },
   shield: {
-    id:'shield', label:'SHIELD', icon:'🛡️',
+    id:'shield', label:'SHIELD', icon:'shield',
     ammo: 1, damage: 0, cooldown: 0, lifetime: 0, radius: 0,
     ttl: 5, shieldDuration: 5.2,
     color: 0x2de2ff,
   },
   // Phase 9 sci-fi arsenal (original designs). Each: own effect, sound hook (see sound.js SOUND_HOOKS), ammo rule.
   plasma: {
-    id:'plasma', label:'PLASMA', icon:'☄️',
+    id:'plasma', label:'PLASMA', icon:'plasma',
     ammo: 8, damage: 22, speed: 85, cooldown: 0.34, lifetime: 2.0, radius: 0.5,
     ttl: 12, splash: 3.5,
     color: 0x39ff88,
   },
   railgun: {
-    id:'railgun', label:'RAILGUN', icon:'🔹',
+    id:'railgun', label:'RAILGUN', icon:'railgun',
     ammo: 3, damage: 55, speed: 220, cooldown: 1.1, lifetime: 1.2, radius: 0.5,
     ttl: 12,
     color: 0x66ccff,
   },
   emp: {
-    id:'emp', label:'EMP', icon:'⚡',
+    id:'emp', label:'EMP', icon:'emp',
     ammo: 2, damage: 6, speed: 70, cooldown: 0.8, lifetime: 2.5, radius: 0.6,
     ttl: 12, empTime: 3,
     color: 0xffe14d,
   },
   swarm: {
-    id:'swarm', label:'SWARM', icon:'🐝',
+    id:'swarm', label:'SWARM', icon:'swarm',
     ammo: 2, damage: 12, speed: 62, cooldown: 0.9, lifetime: 2.8, radius: 0.4,
     ttl: 12, homing: 0.09, volley: 5,
     color: 0xff8a3d,
@@ -160,7 +160,7 @@ export function addMountedAmmo(cstate, n){
   cstate.mounted.ammo = Math.min(MOUNTED_DEF.maxAmmo, cstate.mounted.ammo + n);
   return cstate.mounted.ammo;
 }
-// 📦 ammo can refills every mount a little (mg lots, exotics sparingly).
+// Ammo-can refills every mount a little (mg lots, exotics sparingly).
 export function refillMountsPickup(cstate){
   if(!Array.isArray(cstate.mounts)) return;
   for(const m of cstate.mounts){
