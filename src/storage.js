@@ -164,7 +164,8 @@ export function saveProfileUnified(profile, opts = {}) {
 
 // ---------- Settings / session (LocalStorage per spec) ----------
 export function createDefaultSettings() {
-  return { audio: true, quality: 'auto', touchControls: true, lastCar: 'default', lastPlayedAt: 0, installedAt: 0 };
+  // STEP 1: swapSteer = left-handed pad sides, autoAccel = hold-free throttle.
+  return { audio: true, quality: 'auto', touchControls: true, swapSteer: false, autoAccel: false, lastCar: 'default', lastPlayedAt: 0, installedAt: 0 };
 }
 
 export function loadSettings() {

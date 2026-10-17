@@ -297,6 +297,64 @@ Live prod server sanity: baked `wss://roadkill-server.onrender.com` answered in 
 **Build:** 717 KB `index-CO1j2LhU.js` → `game/dist` (sdcard)
 **Next:** Step 2 HUD redesign (round minimap + district, speedometer + gear, score/combo, banner, coins/menu, chase cam + racing line) — awaiting go-ahead.
 
+## TAKEOVER STEP 1 — Start/race split + landscape HUD ✅ DONE — 2026-10-17
+**Goal:** one screen for the menu, a different screen for racing; a thumb-first landscape HUD; the renamed art actually wired in; every listed defect fixed.
+
+### Screens (the old build mixed both)
+- `body.racing` gates the two screens. **Start screen** = logo + Play / Practice / Host Private / Garage / Settings / Install, economy row, **no race HUD at all**. **Race HUD** mounts only once a race starts.
+- Global chrome (`connOverlay`, `rotatePrompt`, `center-msg`, `debugPanel`, `coinsPop`) moved **outside** `#hud` so the connection overlay is still reachable from the menu — inside `#hud` it would have been `display:none` on the start screen.
+
+### Race HUD zones (was: buttons in a dock across the bottom-centre)
+| Zone | Contents |
+|---|---|
+| top-left | round minimap (live canvas under the art ring) + health / fuel / weapon+ammo bars beneath |
+| top-center | location + lap banner **only** |
+| top-right | position of six, coins, camera, time-of-day, pause (+ FPS, + collapsible race-order tag) |
+| bottom-left | steer left / steer right pads |
+| bottom-right | gas + brake, with fire / boost / jump in an arc above and weapon-swap alongside |
+| bottom-center | round speedometer: sweeping needle, KM/H digits, gear letter, between the thumbs |
+| centre | kept clear |
+
+### Art (60 renamed PNGs → 19 wired in for Step 1)
+`tools/hud-art.py` reads the **originals** from the SD card and writes downscaled, palette-quantised copies to `public/art/`. **16.5 MB → 207 KB.**
+- Backgrounds removed by **border-connected flood fill**, not a colour key — these are glow-on-black assets whose button faces are themselves near-black, so keying all black would punch holes in the buttons. A **second flood from the centre** opens the enclosed disc in `minimap-frame` / `speedometer` so the live canvas shows through. `logo` / `speedo-needle` use a luminance ramp so glow feathers out instead of ending on a hard edge.
+- Threshold is adaptive (most aggressive first) and every file is **verified** (corners transparent, centre opaque/hole) — it fails loudly rather than ship a hole.
+
+### Defects fixed
+1. **Start menu and race HUD mixed** → two screens, gated by `body.racing`.
+2. **Touch buttons in an unreachable row across the bottom-centre** → zone layout, thumb-anchored.
+3. **Minimap in the bottom-right** → top-left, round, with status bars beneath.
+4. **“Broken image” icon over the lap counter** → it was **never a DOM element**. Hiding `#topbar` left it; hiding the canvas removed it. It is Chromium's marker for a dead/uncomposited `<canvas>` — i.e. the *same* root cause as the blank world, not a second bug.
+5. **Top bar crammed, hid the speed number** → the single `#topbar` is gone; speed lives on the dial, lap on the banner, position top-right.
+6. **Right-hand bars overlapping the frame-rate box** → `#healthbar`/`#fuelbar`/`#perfHUD` all sat at `right:12px`; bars moved to the left column, FPS top-right row 2.
+7. **Centre subtitle unreadable on a light backdrop** → `#center-msg` now sits on an opaque dark scrim panel.
+8. **Blank world behind the interface** → two causes, both real, see below.
+9. **Lobby cut off at the bottom** → overlay cards capped at `max-height:94vh` + scroll.
+10. **Four connection states looked identical** → each state now owns a colour, backdrop, icon and its own chrome: **CONNECTING** (cyan, spinner) / **WAKING** (amber, big countdown + draining bar, no spinner) / **FAILED** (red, ⚠️, RETRY NOW) / **RETRY** (green, faster spinner, attempt counter).
+
+### Real bugs found and fixed along the way
+- **No `webglcontextlost` handler.** Without `preventDefault()` the browser never hands the context back, so one GPU hiccup blanked the world *permanently*. Now paused, bannered, and restored automatically.
+- **The “3D NOT SUPPORTED” fallback never worked.** It stubbed the renderer but omitted `shadowMap`, so the very next line threw and killed the whole module — the page it promised to protect still died. Stub now covers every property `main.js` touches. *(Found because the tablet shot refused to boot.)*
+- **`updateCamera()` never ran before a race**, so the menu sat on the default `(0,18,38)` camera looking down −Z with the headlight unaimed. The menu now runs a slow cinematic orbit around the player's car.
+- **Double-firing touch controls.** `camBtn`/`todBtn`/`fireBtn` listened to both `touchstart` *and* `click`, so one tap on a phone fired twice. All pads now use pointer events + `setPointerCapture` (also gives real multi-touch: steer + gas + fire at once, and holds survive sliding off the pad).
+- **GPU memory**: `antialias` now follows quality, pixel-ratio capped at 1.5, `stencil:false` — an unclamped 2× buffer + 4× MSAA on a 3×-DPR phone is the usual cause of mid-race context loss.
+
+### Settings added
+Left-handed steering (`swapSteer` — mirrors the pad zones) and auto-accelerate (`autoAccel` — full throttle unless braking). Both persisted via `createDefaultSettings()`.
+
+### Verified — `sim/step1-shots.mjs`
+| Size | overflow | centre clear | thumb reach | zone overlaps |
+|---|---|---|---|---|
+| 844×390 | none | OK | OK | **none** |
+| 800×360 | none | OK | OK | **none** |
+| 1280×800 | none | OK | OK | **none** |
+
+Connection states: **4/4 distinct** (different backdrop, border, icon, title colour, and chrome) — measured, not eyeballed. Screenshots → `/sdcard/Road kill/screenshots/step1/`.
+
+> **Honest limitation.** This Termux headless Chromium **cannot composite WebGL canvases at all** — a control page that just clears a raw WebGL canvas to red also screenshots pure white, with `isContextLost() === false`. So the 3D area in these screenshots shows the new **CSS world backdrop** (the canvas is hidden in the harness), not the rendered world. This is a screenshot-tool limitation, not the app: at 1280×800 SwiftShader cannot even allocate a context, which is why the app's own fallback banner was exercised there. **The rendered world still needs checking on a real phone.**
+
+**Next:** Step 2 — awaiting go-ahead.
+
 ## PHASE 14 — Premium Economy ⏸ PAUSED (Prompt 3 orders Phase 16 first)
 Work stopped mid-build (coins rename done in working tree, gold feats/shop not built). Resume after Prompt 3 Steps 1–3.
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.

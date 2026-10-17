@@ -56,19 +56,32 @@ const PICKUP_COUNT = 10;
 const canvas = document.getElementById('c');
 const miniCanvas = document.getElementById('mini');
 const miniCtx = miniCanvas.getContext('2d');
+// STEP 1: the race HUD is a zone layout with art-backed pads (see index.html).
+// IDs are kept stable where main.js already bound behaviour to them.
 const lapEl = document.getElementById('lap');
-const speedEl = document.getElementById('speed');
-const posEl = document.getElementById('pos');
+const speedEl = document.getElementById('speedNum');
+const needleEl = document.getElementById('needle');
+const gearEl = document.getElementById('gear');
+const posEl = document.getElementById('posChip');
 const positionsEl = document.getElementById('positions');
+const posTagEl = document.getElementById('posTag');
+const ordBodyEl = positionsEl ? positionsEl.querySelector('.ordBody') : null;
+const raceCoinsEl = document.getElementById('raceCoins');
+const trackNameEl = document.getElementById('trackName');
 const centerMsg = document.getElementById('center-msg');
 const healthFill = document.getElementById('healthfill');
-const boostBtn = document.getElementById('boostBtn');
-const fireBtn = document.getElementById('fireBtn');
-// Phase 7 controls DOM
-const jumpBtn = document.getElementById('jumpBtn');
+const boostBtn = document.getElementById('boostPad');
+const fireBtn = document.getElementById('firePad');
+// Phase 7 controls DOM — pads are now <div class="pad"> with a real art <img>
+const jumpBtn = document.getElementById('jumpPad');
+const weaponPadBtn = document.getElementById('weaponPad');
 const camBtn = document.getElementById('camBtn');
+const pauseBtn = document.getElementById('pauseBtn');
 const todBtn = document.getElementById('todBtn');
 const perfHUD = document.getElementById('perfHUD');
+const startScreen = document.getElementById('startScreen');
+const glBanner = document.getElementById('glBanner');
+const SPEED_MAX_KMH = 260; // needle sweep range on the dial
 const setQuality = document.getElementById('setQuality');
 const setTOD = document.getElementById('setTOD');
 let camMode = 0; // 0 chase, 1 hood, 2 far
@@ -161,6 +174,12 @@ const settingsOverlay = document.getElementById('settingsOverlay');
 const settingsClose = document.getElementById('settingsClose');
 const setAudio = document.getElementById('setAudio');
 const setTouch = document.getElementById('setTouch');
+// STEP 1: left-handed steering + auto-accelerate
+const setSwapSteer = document.getElementById('setSwapSteer');
+const setAutoAccel = document.getElementById('setAutoAccel');
+const isSwapSteer = () => settings && settings.swapSteer === true;
+const isAutoAccel = () => settings && settings.autoAccel === true;
+function applySteerSide(){ document.body.classList.toggle('swapSteer', isSwapSteer()); }
 const syncInfo = document.getElementById('syncInfo');
 const historyList = document.getElementById('historyList');
 const flushSyncBtn = document.getElementById('flushSyncBtn');
@@ -171,20 +190,10 @@ const resetProgressBtn = document.getElementById('resetProgressBtn');
 // 'static screen' on phone). Show a clear banner instead; DOM HUD keeps working.
 let webglOK = true;
 let renderer;
-try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-} catch (e) {
-  webglOK = false;
-  console.error('[ROADKILL] WebGL unavailable:', e);
-  const div = document.createElement('div');
-  div.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:99;background:#2a0e12;border:1px solid #ff5566;color:#fff;padding:18px 22px;border-radius:12px;font:700 13px system-ui;text-align:center;max-width:86vw';
-  div.innerHTML = '<b>3D NOT SUPPORTED</b><br>This browser has no WebGL. Try Chrome, or update your system WebView.';
-  document.body.appendChild(div);
-  window.__rkBootError = 'WebGL unavailable: ' + (e && e.message || e);
-  // stub renderer so the rest of the module still parses/boots
-  renderer = { setSize(){}, setPixelRatio(){}, render(){}, domElement: canvas, capabilities:{} };
-}
-// Phase 7: HIGH quality by default, SIMPLE only for weak devices (or user choice).
+// STEP 1: pick quality BEFORE creating the context, because quality decides how
+// much GPU memory the drawing buffer costs. On a 3x-DPR phone an unclamped 2x
+// buffer plus 4x MSAA plus a 1024² shadow map is hundreds of MB — the usual
+// reason a context dies mid-race (dead canvas + blank world).
 let qualityMode = 'high';
 try {
   const qs = JSON.parse(localStorage.getItem('rk.settings.v1') || '{}').quality;
@@ -192,12 +201,57 @@ try {
   else if ((innerWidth < 700) && ((navigator.hardwareConcurrency || 8) <= 4)) qualityMode = 'simple';
 } catch {}
 const IS_HIGH = () => qualityMode === 'high';
-renderer.setPixelRatio(IS_HIGH() ? Math.min(devicePixelRatio, 2) : Math.min(devicePixelRatio, 1.25));
+const pixelRatioCap = () => IS_HIGH() ? 1.5 : 1.25;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas, antialias: IS_HIGH(), powerPreference: 'high-performance',
+    stencil: false, failIfMajorPerformanceCaveat: false,
+  });
+} catch (e) {
+  webglOK = false;
+  console.error('[ROADKILL] WebGL unavailable:', e);
+  const div = document.createElement('div');
+  div.id = 'glFailBanner';
+  div.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:99;background:#2a0e12;border:1px solid #ff5566;color:#fff;padding:18px 22px;border-radius:12px;font:700 13px system-ui;text-align:center;max-width:86vw';
+  div.innerHTML = '<b>3D NOT SUPPORTED</b><br>This browser has no WebGL. Try Chrome, or update your system WebView.';
+  document.body.appendChild(div);
+  window.__rkBootError = 'WebGL unavailable: ' + (e && e.message || e);
+  // Stub renderer so the rest of the module still parses/boots and the DOM HUD
+  // stays usable. It must expose EVERY property main.js touches on the real
+  // renderer — the previous stub omitted shadowMap, so the line right below
+  // threw and killed the whole module, meaning this fallback never worked.
+  renderer = {
+    setSize(){}, setPixelRatio(){}, render(){}, domElement: canvas,
+    shadowMap: { enabled: false, type: null },
+    info: { render: { calls: 0, triangles: 0 } },
+    capabilities: {},
+  };
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelRatioCap()));
 renderer.setSize(innerWidth, innerHeight);
 try { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1; } catch {}
 try { renderer.outputColorSpace = THREE.SRGBColorSpace; } catch {}
 renderer.shadowMap.enabled = IS_HIGH();
 try { renderer.shadowMap.type = THREE.PCFSoftShadowMap; } catch {}
+// STEP 1: without preventDefault() the browser will never hand the context
+// back, so one GPU hiccup permanently blanked the world. Now we pause the
+// render loop, tell the player, and resume automatically on restore.
+let glLost = false, glRestores = 0;
+if (webglOK) {
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();                 // required for restoration to happen
+    glLost = true; window.__rkGLLost = true;
+    if (glBanner) { glBanner.textContent = '3D PAUSED — RECOVERING…'; glBanner.classList.add('show'); }
+    console.warn('[ROADKILL] WebGL context lost');
+  }, false);
+  canvas.addEventListener('webglcontextrestored', () => {
+    glLost = false; glRestores++; window.__rkGLRestores = glRestores;
+    if (glBanner) glBanner.classList.remove('show');
+    // force a fresh render + HUD refresh on the next frames
+    last = performance.now();
+    console.warn('[ROADKILL] WebGL context restored');
+  }, false);
+}
 scene: void 0;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060610);
@@ -674,7 +728,9 @@ async function renderHistory(){
     }
     if (setAudio) setAudio.checked = settings.audio !== false;
     if (setTouch) setTouch.checked = settings.touchControls !== false;
-    applyTouchSetting();
+    if (setSwapSteer) setSwapSteer.checked = settings.swapSteer === true;
+    if (setAutoAccel) setAutoAccel.checked = settings.autoAccel === true;
+    applyTouchSetting(); applySteerSide();
   } catch {}
   renderHistory();
   refreshSyncInfo();
@@ -682,9 +738,9 @@ async function renderHistory(){
   installCrashReporter();
 })();
 function applyTouchSetting(){
-  const controls = document.getElementById('controls');
-  const on = settings.touchControls !== false;
-  if (controls && window.innerWidth < 700) controls.style.display = on ? '' : 'none';
+  // STEP 1: pads are zone-anchored (bottom-left / bottom-right), not a bottom
+  // dock, so they stay useful on tablets. Only the setting hides them now.
+  document.body.classList.toggle('noTouch', settings.touchControls === false);
 }
 addEventListener('online', () => { updateOfflineBadge(); refreshSyncInfo(); flushSyncQueueStub().then(refreshSyncInfo); });
 addEventListener('offline', () => { updateOfflineBadge(); refreshSyncInfo(); });
@@ -709,6 +765,9 @@ if (settingsClose) settingsClose.addEventListener('click', closeSettings);
 if (settingsOverlay) settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 if (setAudio) setAudio.addEventListener('change', () => { settings = saveSettings({ audio: setAudio.checked }); enqueueSyncOp('settings.save', { audio: settings.audio }); });
 if (setTouch) setTouch.addEventListener('change', () => { settings = saveSettings({ touchControls: setTouch.checked }); applyTouchSetting(); enqueueSyncOp('settings.save', { touchControls: settings.touchControls }); });
+// STEP 1: left-handed steering (mirror the pad zones) + auto-accelerate
+if (setSwapSteer) setSwapSteer.addEventListener('change', () => { settings = saveSettings({ swapSteer: setSwapSteer.checked }); applySteerSide(); enqueueSyncOp('settings.save', { swapSteer: settings.swapSteer }); });
+if (setAutoAccel) setAutoAccel.addEventListener('change', () => { settings = saveSettings({ autoAccel: setAutoAccel.checked }); enqueueSyncOp('settings.save', { autoAccel: settings.autoAccel }); });
 if (flushSyncBtn) flushSyncBtn.addEventListener('click', async () => {
   const r = await flushSyncQueueStub();
   if (syncInfo) syncInfo.textContent = r.sent ? `Sync stub: ${r.sent} op(s) queued for /api/sync` : (r.reason === 'offline' ? 'Offline — will sync later' : 'Sync queue: 0 pending');
@@ -1062,27 +1121,57 @@ const connCount = document.getElementById('connCount');
 const connSpin = document.getElementById('connSpin');
 const connRetryBtn = document.getElementById('connRetryBtn');
 let connTimer = null;
+// STEP 1: the four connection states must be visually different at a glance,
+// not the same card with different words. Each state owns a colour, an icon,
+// its own chrome (spinner / draining countdown / retry button) and a backdrop.
+const connBadge = document.getElementById('connBadge');
+const connWrap = document.getElementById('connWrap');
+const connFill = document.getElementById('connFill');
+const connAttempts = document.getElementById('connAttempts');
+let connAttemptNo = 0;
 function showConnState(state, detail){
   if (!connOverlay) return;
+  if (state === 'hide'){ connOverlay.classList.remove('show'); return; }
   connOverlay.classList.add('show');
-  if (connRetryBtn) connRetryBtn.style.display = state === 'failed' ? 'block' : 'none';
-  if (connSpin) connSpin.style.display = state === 'failed' ? 'none' : 'block';
-  if (state === 'connecting') { connTitle.textContent = 'CONNECTING'; connSub.textContent = detail || 'Finding the fastest server…'; connCount.textContent = ''; }
-  if (state === 'waking') { connTitle.textContent = 'SERVER WAKING UP'; connSub.textContent = 'Free server spins down when idle — first load takes up to a minute.'; }
-  if (state === 'failed') { connTitle.textContent = 'CONNECTION FAILED'; connSub.textContent = detail || 'Could not reach the server. Check your internet and retry.'; connCount.textContent = ''; }
-  if (state === 'hide') connOverlay.classList.remove('show');
+  connOverlay.dataset.state = state;              // drives all per-state styling
+  if (connAttempts) connAttempts.textContent = connAttemptNo > 1 ? `ATTEMPT ${connAttemptNo}` : '';
+  if (connSpin) connSpin.style.display = (state === 'failed' || state === 'waking') ? 'none' : 'block';
+  if (state === 'connecting') {
+    if (connBadge) connBadge.textContent = '🔄';
+    connTitle.textContent = 'CONNECTING';
+    connSub.textContent = detail || 'Finding the fastest server…';
+    if (connCount) connCount.textContent = '';
+  } else if (state === 'retry') {
+    if (connBadge) connBadge.textContent = '🔁';
+    connTitle.textContent = 'RECONNECTING';
+    connSub.textContent = detail || 'Trying again — holding your spot in the lobby.';
+    if (connCount) connCount.textContent = '';
+  } else if (state === 'waking') {
+    if (connBadge) connBadge.textContent = '💤';
+    connTitle.textContent = 'SERVER WAKING UP';
+    connSub.textContent = 'Free server sleeps when idle — a cold boot can take up to a minute.';
+  } else if (state === 'failed') {
+    if (connBadge) connBadge.textContent = '⚠️';
+    connTitle.textContent = 'CONNECTION FAILED';
+    connSub.textContent = detail || 'Could not reach the server. Check your connection and retry.';
+    if (connCount) connCount.textContent = '';
+    if (connFill) connFill.style.width = '0%';
+  }
 }
 function startWakeCountdown(seconds = 60){
   stopWakeCountdown();
+  connAttemptNo++;
   const t0 = Date.now();
+  if (connFill) connFill.style.width = '100%';
   connTimer = setInterval(()=>{
     const left = Math.max(0, seconds - Math.floor((Date.now() - t0) / 1000));
     if (connCount) connCount.textContent = left + 's';
+    if (connFill) connFill.style.width = (left / seconds * 100).toFixed(1) + '%';  // draining bar
     if (left <= 0) stopWakeCountdown();
   }, 250);
 }
 function stopWakeCountdown(){ if (connTimer) { clearInterval(connTimer); connTimer = null; } if (connCount) connCount.textContent = ''; }
-if (connRetryBtn) connRetryBtn.addEventListener('click', ()=>{ showConnState('connecting'); connectNet(lobbyMode || 'quick'); });
+if (connRetryBtn) connRetryBtn.addEventListener('click', ()=>{ connAttemptNo++; showConnState('retry'); connectNet(lobbyMode || 'quick'); });
 
 async function ensureConnected() {
   if (net && net.connected) return true;
@@ -2087,21 +2176,44 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; if(e.code==='Space') keys[' ']=false; });
 let touchSteer=0, touchAccel=0;
-function bindHold(el,onStart,onEnd){ const s=e=>{e.preventDefault(); onStart(e);}, en=e=>{e.preventDefault(); onEnd(e);}; el.addEventListener('touchstart',s,{passive:false}); el.addEventListener('touchend',en,{passive:false}); el.addEventListener('mousedown',s); el.addEventListener('mouseup',en); el.addEventListener('mouseleave',en); }
-bindHold(document.getElementById('left'), ()=>touchSteer=-1, ()=>{if(touchSteer===-1) touchSteer=0});
-bindHold(document.getElementById('right'),()=>touchSteer=1, ()=>{if(touchSteer===1) touchSteer=0});
-bindHold(document.getElementById('gas'), ()=>touchAccel=1, ()=>{if(touchAccel===1) touchAccel=0});
-bindHold(document.getElementById('brake'),()=>touchAccel=-1, ()=>{if(touchAccel===-1) touchAccel=0});
+// STEP 1: pointer events + pointer capture replace the old touchstart/mouse
+// pair. Capture keeps a hold alive when a finger slides off the pad, and each
+// pad tracks its own pointer id, so steering + gas + fire all work at once.
+function bindHold(el,onStart,onEnd){
+  if(!el) return;
+  const held=new Set();
+  const down=e=>{
+    if(e.button!==undefined && e.button!==0) return;
+    e.preventDefault();
+    try{ el.setPointerCapture(e.pointerId); }catch{}
+    held.add(e.pointerId); el.classList.add('hit'); onStart(e);
+  };
+  const up=e=>{
+    if(!held.has(e.pointerId)) return;
+    held.delete(e.pointerId);
+    if(!held.size) el.classList.remove('hit');
+    onEnd(e);
+  };
+  el.addEventListener('pointerdown',down);
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+  el.addEventListener('lostpointercapture',up);
+  if(!('PointerEvent' in window)){ // legacy fallback
+    el.addEventListener('touchstart',e=>{e.preventDefault();el.classList.add('hit');onStart(e);},{passive:false});
+    el.addEventListener('touchend',e=>{e.preventDefault();el.classList.remove('hit');onEnd(e);},{passive:false});
+  }
+}
+bindHold(document.getElementById('leftPad'), ()=>touchSteer=-1, ()=>{if(touchSteer===-1) touchSteer=0});
+bindHold(document.getElementById('rightPad'),()=>touchSteer=1,  ()=>{if(touchSteer===1) touchSteer=0});
+bindHold(document.getElementById('gasPad'),  ()=>touchAccel=1,   ()=>{if(touchAccel===1) touchAccel=0});
+bindHold(document.getElementById('brakePad'),()=>touchAccel=-1,  ()=>{if(touchAccel===-1) touchAccel=0});
 let boostHeld=false;
-['touchstart','mousedown'].forEach(ev=> boostBtn.addEventListener(ev,e=>{e.preventDefault(); boostHeld=true;}));
-['touchend','mouseup','mouseleave'].forEach(ev=> boostBtn.addEventListener(ev,()=> boostHeld=false));
+// STEP 1: all pads go through bindHold (pointer capture + .hit feedback)
+bindHold(boostBtn, ()=>{ boostHeld=true; }, ()=>{ boostHeld=false; });
 addEventListener('keydown',e=>{ if(e.code==='Space'||e.key==='Shift') boostHeld=true; });
 addEventListener('keyup',e=>{ if(e.code==='Space'||e.key==='Shift') boostHeld=false; });
-fireBtn.addEventListener('click',e=>{ e.preventDefault(); tryPlayerFire(); });
-fireBtn.addEventListener('touchstart',e=>{ e.preventDefault(); tryPlayerFire(); },{passive:false});
 let fireHeld=false;
-['mousedown','touchstart'].forEach(ev=> fireBtn.addEventListener(ev,()=> fireHeld=true));
-['mouseup','mouseleave','touchend'].forEach(ev=> fireBtn.addEventListener(ev,()=> fireHeld=false));
+bindHold(fireBtn, ()=>{ fireHeld=true; tryPlayerFire(); }, ()=>{ fireHeld=false; });
 addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='j'||e.key==='x'||e.key==='X') fireHeld=true; });
 addEventListener('keyup',e=>{ if(e.key.toLowerCase()==='j'||e.key==='x'||e.key==='X') fireHeld=false; });
 // Phase 7: jump (C), camera (V), time-of-day (T)
@@ -2111,7 +2223,9 @@ function tryPlayerJump(){
   player.vy = 9.5; player.airborne = true;
   sfx('jump');
 }
-function cycleCamera(){ camMode = (camMode + 1) % CAM_NAMES.length; if (camBtn) camBtn.textContent = 'CAM:' + CAM_NAMES[camMode]; }
+// STEP 1: camBtn is an art icon button now, so cycleCamera advertises the mode
+// on its title + a toast instead of overwriting its <img> with text.
+function cycleCamera(){ camMode = (camMode + 1) % CAM_NAMES.length; if (camBtn) camBtn.title = 'Camera: ' + CAM_NAMES[camMode]; popCoins('CAM — ' + CAM_NAMES[camMode], 'xp'); }
 function cycleTOD(){
   const order = ['night', 'dusk', 'day', 'auto'];
   const cur = order.indexOf(skyTime) >= 0 ? skyTime : 'night';
@@ -2138,9 +2252,15 @@ function cyclePlayerMount(){
   if(m){ const def = WEAPON_DEFS[m.type]; popCoins(`${def.icon} ${def.label} [${player.cstate.mountIdx+1}/${player.cstate.mounts.length}]`,'xp'); sfx('ui'); }
 }
 if(weaponHUD){ weaponHUD.style.pointerEvents='auto'; weaponHUD.style.cursor='pointer'; weaponHUD.title='Tap to switch weapon mount'; weaponHUD.addEventListener('click', cyclePlayerMount); }
-if (jumpBtn) { ['touchstart','mousedown'].forEach(ev=> jumpBtn.addEventListener(ev,e=>{ e.preventDefault(); tryPlayerJump(); })); }
-if (camBtn) { camBtn.textContent = 'CAM:' + CAM_NAMES[camMode]; ['click','touchstart'].forEach(ev=> camBtn.addEventListener(ev,e=>{ e.preventDefault(); cycleCamera(); })); }
-if (todBtn) { ['click','touchstart'].forEach(ev=> todBtn.addEventListener(ev,e=>{ e.preventDefault(); cycleTOD(); })); }
+if (jumpBtn) bindHold(jumpBtn, ()=>{ tryPlayerJump(); }, ()=>{});
+// STEP 1: new race-screen controls — pause, weapon swap, collapsible race order
+if (pauseBtn) pauseBtn.addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
+if (weaponPadBtn) weaponPadBtn.addEventListener('pointerdown', e => { e.preventDefault(); cyclePlayerMount(); });
+if (positionsEl) positionsEl.addEventListener('click', () => positionsEl.classList.toggle('open'));
+// STEP 1: pointerdown only — the old 'touchstart'+'click' pair double-fired
+// on phones, so a single tap on FIRE launched twice.
+if (camBtn) { camBtn.title = 'Camera: ' + CAM_NAMES[camMode]; camBtn.addEventListener('pointerdown', e => { e.preventDefault(); cycleCamera(); }); }
+if (todBtn) todBtn.addEventListener('pointerdown', e => { e.preventDefault(); cycleTOD(); });
 // Phase 7 gamepad: left stick steer, RT/LT accel/brake, A jump, RB fire, LB boost, Y camera.
 const padState = { jump: false, cam: false, fire: false };
 function pollGamepad(){
@@ -2222,7 +2342,7 @@ document.addEventListener('click', (e) => {
   openOnline();
   connectNet('quick');
 });
-function startGame(){ started=true; centerMsg.style.display='none'; try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
+function startGame(){ started=true; document.body.classList.add('racing'); centerMsg.style.display='none'; try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
 function restart(){
   placeCars(); spawnPickups(); resetRoadblocks(); for(const s of shortcutSegs) s.claimed=false; bannerViewed.clear(); if(likeBtn) likeBtn.classList.remove('show'); finished=false; started=true; gameTime=0; shake=0; hitFlashTimer=0; hideReviveOverlay(); hideOutOverlay();
   spectating=false; if(spectateBadge) spectateBadge.classList.remove('show');
@@ -2269,6 +2389,8 @@ function updateCar(c, dt, isPlayerCar){
     accelInput=(up?1:0)-(down?0.6:0)+touchAccel+(padState.accel||0);
     if(!up && !down && touchAccel===0 && started && !paused) accelInput=0.35;
     if(touchAccel!==0) accelInput=touchAccel;
+    // STEP 1: auto-accelerate holds full throttle unless the brake is pressed
+    if(isAutoAccel() && started && !paused && touchAccel>=0 && !down && !up) accelInput=1;
     steerInput=Math.max(-1,Math.min(1,steerInput));
     wantBoost=boostHeld||keys['shift']||padState.boost;
     accelInput=Math.max(-1,Math.min(1,accelInput));
@@ -2990,10 +3112,23 @@ function showFinish(rank){
 // ---------- HUD ----------
 function updateHUD(){
   const kmh=Math.round(player.speed*3.6*2.1);
-  speedEl.innerHTML=`${kmh} <small>KM/H</small>`;
+  speedEl.textContent=kmh;
+  // STEP 1: needle sweeps the dial and a gear letter sits under the digits.
+  if(needleEl){
+    const t=Math.min(1,Math.max(0,kmh/SPEED_MAX_KMH));
+    needleEl.style.transform=`translate(-50%,-58%) rotate(${(-135+270*t).toFixed(1)}deg)`;
+  }
+  if(gearEl){
+    const g = player.cstate.wrecked ? 'X' : kmh<2 ? 'N' : kmh<60 ? '1' : kmh<105 ? '2'
+            : kmh<150 ? '3' : kmh<200 ? '4' : '5';
+    if(gearEl.textContent!==g) gearEl.textContent=g;
+  }
   lapEl.textContent=`LAP ${Math.min(player.lap+1,TOTAL_LAPS)} / ${TOTAL_LAPS}`;
+  if(trackNameEl){ const tr=TRACKS[currentTrackIdx]; const nm=tr&&(tr.name||tr.id); if(nm && trackNameEl.textContent!==nm) trackNameEl.textContent=nm; }
   const order=rankCars(), rank=order.indexOf(player)+1;
-  posEl.textContent=`P${rank} / 6`;
+  posEl.textContent=`P${rank}/${order.length}`;
+  if(posTagEl) posTagEl.textContent=` P${rank}`;
+  if(raceCoinsEl && coinsValEl) raceCoinsEl.textContent=coinsValEl.textContent;
   const hp=Math.max(0, player.cstate.health);
   healthFill.style.width=hp+'%';
   healthFill.className=hp<30?'low':hp<60?'mid':'';
@@ -3013,7 +3148,9 @@ function updateHUD(){
     const stat=c.out?'OUT':(c.cstate.wrecked?'WRECKED':`${c.lap+1}/${TOTAL_LAPS} ${hp2}% ⛽${Math.round(c.fuel)}`);
     html+=`<div style="${isMe?'color:#ffcc00;font-weight:900':''}">${idx+1}. ${label} ${stat} ${icon}</div>`;
   });
-  positionsEl.innerHTML=`<b>RACE</b><br>`+html;
+  // STEP 1: race order is a collapsed tag; this fills the expandable body only,
+  // so the "RACE P3" header stays put when it collapses.
+  if(ordBodyEl) ordBodyEl.innerHTML=html;
   // weapon HUD — Phase 8: pickup weapon first, else mounted reserve
   const w=player.cstate.weapon;
   const gun=activeGun(player.cstate);
@@ -3031,7 +3168,13 @@ function updateHUD(){
     weaponTimerFill.style.width='100%'; weaponTimerFill.style.background= player.cstate.disabled>0 ? 'linear-gradient(90deg,#ffe14d,#ff9a00)' : 'linear-gradient(90deg,#2de2ff,#2d7dff)';
   }
   else { weaponHUD.classList.remove('empty'); const def=WEAPON_DEFS[w.type]; weaponIcon.textContent=def.icon; weaponName.textContent=def.label; weaponAmmo.textContent=w.ammo>0? `${w.ammo} • ${w.ttl.toFixed(1)}s` : `— • ${w.ttl.toFixed(1)}s`; const pct=Math.max(0, w.ttl/def.ttl*100); weaponTimerFill.style.width=pct+'%'; weaponTimerFill.style.background= pct<30?'linear-gradient(90deg,#ff3344,#ff6a00)':'linear-gradient(90deg,#ffcc00,#ff6a00)'; }
-  fireBtn.textContent = gun==='mounted' ? 'FIRE 🔫' : (w ? `FIRE ${WEAPON_DEFS[w.type].icon}` : 'FIRE');
+  // STEP 1: fire is an art pad now, so advertise the armed weapon on its label
+  // and tint it instead of rewriting its text content.
+  if(fireBtn){
+    const armed=!!gun;
+    fireBtn.title=armed ? (gun==='mounted' ? 'Fire — mounted gun' : 'Fire — '+WEAPON_DEFS[w.type].label) : 'Fire — no weapon';
+    fireBtn.classList.toggle('armed',armed);
+  }
   // Phase 8: fuel bar + low-fuel warning (Phase 9: per-vehicle tank size)
   if(fuelFill){
     const fp=Math.max(0, player.fuel/(player.fuelMax||FUEL_MAX)*100);
@@ -3075,6 +3218,32 @@ function drawMinimap(){
       const x=tx(c.pos.x), y=tz(c.pos.z); miniCtx.beginPath(); miniCtx.arc(x,y,3,0,Math.PI*2);
       miniCtx.fillStyle=c.cstate.wrecked?'#000':'#2ecc71'; miniCtx.fill(); miniCtx.strokeStyle='rgba(0,0,0,0.6)'; miniCtx.lineWidth=1; miniCtx.stroke();
     });
+  }
+}
+
+// STEP 1: before a race, updateCamera() never ran, so the menu sat on the
+// default (0,18,38) view looking straight down -Z with the headlight unaimed —
+// i.e. an empty-looking backdrop. The menu now gets a slow cinematic orbit
+// around the player's car on the start line, with lights aimed at it.
+let menuOrbit = 0;
+function frameMenuCamera(dt){
+  menuOrbit += dt * 0.16;
+  const t = (player && player.pos) ? player.pos : null;
+  if (!t) return;
+  const r = 13.5, h = 5.2;
+  camera.position.set(t.x + Math.sin(menuOrbit) * r, h, t.z + Math.cos(menuOrbit) * r);
+  camera.lookAt(t.x, 1.1, t.z);
+  if (IS_HIGH()) {
+    dir.position.set(t.x + 60 - todPhase * 140, 90 - todPhase * 55, t.z + 40);
+    dir.target.position.set(t.x, 0, t.z); dir.target.updateMatrixWorld();
+  }
+  const yaw = (player.yaw !== undefined) ? player.yaw : 0;
+  const lampOn = todPhase > 0.45;
+  playerHead.intensity = lampOn ? (IS_HIGH() ? 60 : 25) : 0;
+  if (lampOn) {
+    playerHead.position.set(t.x + Math.sin(yaw), 2.3, t.z + Math.cos(yaw));
+    playerHead.target.position.set(t.x + Math.sin(yaw) * 30, 0, t.z + Math.cos(yaw) * 30);
+    playerHead.target.updateMatrixWorld();
   }
 }
 
@@ -3146,10 +3315,12 @@ function frame(now){
   pollGamepad();
   if (skyTime === 'auto') applyTimeOfDay((gameTime * 0.008) % 1);
   if(hitFlashTimer>0){ hitFlashTimer-=dt; if(hitFlashTimer<=0) hitFlash.classList.remove('show'); }
-  if(paused){ renderer.render(scene,camera); drawMinimap(); updatePerfHUD(dt); return; }
+  if(paused){ if(!glLost) renderer.render(scene,camera); drawMinimap(); updatePerfHUD(dt); return; }
   if(!started){
     gameTime+=dt; cars.forEach(c=>{ c.mesh.position.y=0.15+Math.sin(gameTime*2+c.trackIdx*0.1)*0.05; pickupMeshes.forEach((m,i)=>{ m.rotation.y+=dt*1.6; m.position.y=0.55+Math.sin(gameTime*2+i)*0.22; }); });
-    renderer.render(scene,camera); drawMinimap(); updateHUD(); updatePerfHUD(dt); return;
+    frameMenuCamera(dt);   // STEP 1: live backdrop for the start menu
+    if(!glLost) renderer.render(scene,camera);
+    drawMinimap(); updateHUD(); updatePerfHUD(dt); return;
   }
   while(acc>=FIXED){
     gameTime+=FIXED;
@@ -3197,7 +3368,7 @@ function frame(now){
   let dodgeNeeded=0;
   for(const pr of projectiles){ if(pr.ownerId===player.idx) continue; const dx=pr.pos.x - player.pos.x, dz=pr.pos.z - player.pos.z; const d=Math.hypot(dx,dz); if(d<16 && pr.type!=='mine'){ const toAng=Math.atan2(dx,dz), prYaw=Math.atan2(pr.vel.x,pr.vel.z); let diff=Math.atan2(Math.sin(toAng-prYaw),Math.cos(toAng-prYaw)); if(Math.abs(diff)>2.2){ dodgeNeeded = (Math.random()>0.5?1:-1); break; } }}
   if(dodgeNeeded!==0) player.dodgeDir=dodgeNeeded*0.7;
-  renderer.render(scene,camera);
+  if(!glLost) renderer.render(scene,camera);   // STEP 1: skip while the context is down
 }
 requestAnimationFrame(frame);
 addEventListener('resize',()=>{ updateHudScale(); updateOrientation(); });
@@ -3238,6 +3409,12 @@ function bootWorld(){
   }
 }
 bootWorld();
+
+// Debug hook (read-only) — lets the phone test harness + debug panel sample the
+// real WebGL framebuffer and scene state instead of guessing from screenshots.
+// STEP 1: layout tests drive the real functions instead of faking the DOM.
+window.__rkDebug = { renderer, scene, camera, showConnState, startWakeCountdown, stopWakeCountdown,
+                     setRacing: v => document.body.classList.toggle('racing', !!v) };
 
 // ---------- PHASE 16 hidden debug panel: tap top-left corner 3x ----------
 const debugPanel = document.getElementById('debugPanel');
