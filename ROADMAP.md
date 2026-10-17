@@ -261,7 +261,44 @@ Read ROADMAP.md + GAME.md + handoff.md. State of the world going into Phases 13�
 **Build:** 711 KB `index-C9T2KKPN.js` → `game/dist` (sdcard)
 **Limits (honest):** local bots still simulate per-client (diverge across screens); daily/season bonuses still local (move server-side in Phase 14); skins stay local-visual until the gold shop (Phase 14).
 
-## PHASE 14 — Premium Economy ⬜ PLANNED (PROMPT 2)
+---
+
+## PHASE 16 — Phone Experience Fix (PROMPT 3) ✅ STEP 1 DONE — 2026-10-17
+**Goal:** the deployed game must actually play on a real phone — not static, not scattered, not stuck in portrait. Phase 14 paused for this.
+
+### Root causes of the “static scattered screen” (found & fixed)
+1. **Module crashed at boot** → render loop never ran → static canvas with HUD scattered on top. World-building calls (`buildTrack/placeCars/spawnPickups`) ran mid-file before their state arrays existed. Fix: `bootWorld()` runs after all declarations (`src/main.js`, `window.__rkBooted` flag).
+2. **Duplicate `const rotatePrompt`** — a syntax error that killed the whole bundle on some loads. Fixed; served bundle passes `node --check`.
+3. **“TAP TO CONNECT” swallowed the tap** — the title div (`pointer-events:auto`) covered the canvas, so the canvas click handler never fired → tapping did nothing. Fix: one document-level tap handler (skips buttons/panels) — first tap = fullscreen + landscape lock, then connect + quick match.
+4. **WebGL failure killed the page** — `new THREE.WebGLRenderer()` threw and nothing rendered. Now caught: clear “3D NOT SUPPORTED” banner, DOM HUD keeps working, `__rkBootError` recorded.
+5. **Connection states invisible** — a failed connect fired `onDisconnect` → `setOnlineMode(false)` wiped the CONNECTING/WAKING/FAILED overlay instantly. Now the overlay owns the UI during connect attempts.
+
+### Built
+- [x] First tap → `requestFullscreen` + `screen.orientation.lock('landscape')` where allowed
+- [x] Manifest: `display: fullscreen` + `orientation: landscape` (installed app opens landscape fullscreen)
+- [x] Portrait on phones/small tablets → full-screen ROTATE YOUR PHONE prompt, game auto-pauses, resumes on rotate back
+- [x] Dynamic viewport height (`--vh`) + safe-area insets (`--sat/--sab/--sal/--sar`) + whole-HUD `--hudscale` (0.62–1.0) — nothing cut off on notched phones
+- [x] Connection states: CONNECTING → SERVER WAKING UP (60 s countdown after 4 s) → CONNECTION FAILED + RETRY button (all verified headless)
+- [x] Hidden debug panel — tap top-left corner 3×: screen size/DPR, orientation, viewport, fullscreen, WebGL, fps/tris/calls, quality, server+rtt, boot, HUD scale
+- [x] Headless test harness: `sim/phone-test.mjs` (fresh Chromium per size — software-GL contexts leak on ARM headless), `sim/visual-check5.mjs`, `sim/debug-panel-check.mjs`
+
+### Verified (headless Chromium + SwiftShader WebGL)
+| Size | Booted | HUD overflow | Rotate prompt | FPS (software GL) |
+|---|---|---|---|---|
+| 844×390 landscape | ✓ | none | hidden | 51 |
+| 390×844 portrait | ✓ | none | **shown** | 49 |
+| 800×360 landscape | ✓ | none | hidden | 59 |
+| 360×800 portrait | ✓ | none | **shown** | 53 |
+| 1280×800 tablet | ✓ | none | hidden | 58 |
+
+Screenshots + `phone-test-report.json` → `/sdcard/Road kill/screenshots/`.
+Live prod server sanity: baked `wss://roadkill-server.onrender.com` answered in ~1 s, room joined ("Room V6GZ — 1/6 racers").
+
+**Build:** 717 KB `index-CO1j2LhU.js` → `game/dist` (sdcard)
+**Next:** Step 2 HUD redesign (round minimap + district, speedometer + gear, score/combo, banner, coins/menu, chase cam + racing line) — awaiting go-ahead.
+
+## PHASE 14 — Premium Economy ⏸ PAUSED (Prompt 3 orders Phase 16 first)
+Work stopped mid-build (coins rename done in working tree, gold feats/shop not built). Resume after Prompt 3 Steps 1–3.
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.
 
 - [ ] Rename money → coins everywhere (code, UI, docs); gold = rare premium currency
