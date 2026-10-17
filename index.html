@@ -262,7 +262,29 @@
     #garageOverlay.show{display:flex}
     #garageOverlay .card,#settingsOverlay .card,#onlineOverlay .card{background:#14141e;border:1px solid rgba(255,255,255,.14);
       padding:16px;border-radius:16px;min-width:320px;max-width:min(94vw,560px);width:100%;max-height:94vh;overflow:auto}
-    #garageGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    /* STEP 2 — garage fit. This overlay was mathematically guaranteed to
+       overflow a landscape phone, from two separate faults:
+         1. #garageGrid is a 2-COLUMN grid, but renderGarage() puts exactly two
+            children in it — the tab bar and the entire item list. So the tabs
+            rendered in the left half and every item in the squeezed right
+            half: the "unfinished, weird" half-empty look, plus a card wider
+            than the screen with no visible scrollbar.
+         2. the card allowed max-height:94vh while the overlay padded 16px top
+            and bottom, so 94vh + 32px > 100vh on EVERY phone (844x390 came out
+            8.6px over, 800x360 10.4px over) and the top of the card — header
+            and the close button — was clipped away.
+       Settings and online share the .card rule above, so this is scoped to the
+       garage only. */
+    #garageOverlay{align-items:flex-start;justify-content:center;padding:10px}
+    #garageOverlay .card{margin:auto;             /* centers when there is room, never clips the top */
+      min-width:min(320px,100%);max-width:min(96vw,560px);
+      max-height:calc(var(--vh,100vh) - 20px);   /* fits inside the real viewport, not 94vh + padding */
+      display:flex;flex-direction:column;overflow:hidden}
+    #garageGrid{display:block;                    /* stack the tabs above a full-width list */
+      flex:1 1 auto;min-height:0;overflow-y:auto;
+      -webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin-top:12px}
+    #garageGrid>div:first-child{position:sticky;top:0;background:#14141e;
+      padding:6px 0;z-index:1}                   /* tabs stay reachable while the list scrolls */
     .skin{border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px;background:rgba(255,255,255,.05);text-align:center}
     .skin.owned{border-color:rgba(46,204,113,.6)}
     .skin.equipped{border-color:#ffcc00;background:rgba(255,204,0,.12)}
@@ -510,6 +532,7 @@
       <p id="outSub" style="opacity:.75;font-size:13px;margin-top:6px">You ran dry.</p>
       <button id="spectateBtn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg> SPECTATE LEADER</button>
       <button id="outRestartBtn" class="ghost">RESTART RACE</button>
+      <button id="outMenuBtn" class="ghost" style="margin-top:8px">MAIN MENU</button>
     </div>
   </div>
   <div id="pauseOverlay"><div class="card">
@@ -518,6 +541,7 @@
       <button id="resumeBtn">RESUME</button>
       <button id="restartBtn" style="background:#2d2d3a;margin-top:8px">RESTART RACE</button>
       <button id="garageBtn2" style="background:#23233a;margin-top:8px">OPEN GARAGE</button>
+      <button id="quitMenuBtn" style="background:#1a1a26;margin-top:8px;opacity:.92">MAIN MENU</button>
     </div>
   </div>
   <div id="reviveOverlay">

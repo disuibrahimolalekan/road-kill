@@ -405,6 +405,172 @@ and `tools/build-icons.py` reports all 36 resolving. Repo-wide scan of `index.ht
 
 **Next:** Step 2 — awaiting go-ahead.
 
+## TAKEOVER STEP 2 — City street from the supplied art ✅ DONE — 2026-10-17
+
+**Request:** *"Build the street from road, sidewalk, building, cone, tree, streetlight, tram,
+parkedcar images as far as phone performance allows."*
+
+### Art pipeline — `tools/world-art.py`
+41 files from `/sdcard/Road kill/copy images/renamed` (read-only originals, never modified) →
+downscaled + 256-colour copies written to `public/art/`. **9241 KB → 2802 KB (30.3%).**
+Two modes, because getting this wrong either looks broken or costs megabytes:
+
+- **`TILE`** (road, sidewalk, facades) stays **fully opaque**. Alpha on a ground texture makes the
+  track see through to the void when trilinear filtering pulls texels from the border.
+- **`SPRITE`** (tree, cone, streetlight, tram, parked car) gets a border-connected flood fill, so
+  black is removed from the silhouette without punching holes in dark interior detail. Verified by
+  content-based `subject_mask` / `subject_kept`: **100 % of the subject retained, clean cut.**
+
+### Scene wiring — `src/main.js`
+- **`CITY`** texture set + `makeProp()` + `buildCityProps()`. Every prop is a pair of **crossed
+  alpha-tested quads** (`alphaTest: 0.45`, `depthWrite: true`) — opaque, so no transparency sorting
+  and no draw-call roulette, which is what a phone needs.
+- **Placed past the guardrail** at `ROAD_WIDTH/2 + 0.7 = 11.7`, so no tree, cone or parked car can
+  ever sit in the racing line. Nothing about collision or AI had to change.
+- Procedural trees and streetlight poles were **replaced** by the art (not stacked on top of it).
+- Streetlights got a `for`-loop guard so a missing texture cannot spin up `TRACK_SAMPLES` lights.
+
+### Verification — `sim/step2-city-check.mjs` — **ALL PASS**
+Scene graph, not screenshots (see harness note): all 10 textures in scene — road ×1, sidewalk ×2,
+facades 9+9+8, tree ×64, streetlight ×26, parkedcar ×18, tram ×4, cone ×40 — **152 alpha-cut
+materials, 765 meshes / 17,928 triangles / 480 draw calls (only +33 over baseline), 16 programs,
+0 app errors.**
+
+### Honest assessment — what still looks weak
+- **Draw calls are flat (+33) but texture count is not free**: 16 programs and 10 large textures is
+  real VRAM on a low-end phone. If a device struggles, drop the facade variety first (3 textures →
+  1) for a ~15 % texture saving and almost no visual loss.
+- **Everything static is a billboard.** Trees, cones and streetlights read perfectly face-on but
+  thin out to a flat plane when the camera passes them side-on — most obvious for the tram and
+  parked cars, which have no depth. A silhouette quad is the honest cheap option; real 3D props are
+  the fix and are on the buy list, not something code can fake convincingly.
+- **Buildings are flat facades.** No roof detail, no parallax between blocks; at speed the street
+  edges look painted on.
+- **Screenshots cannot show any of this** — see the harness note in Step 1b. It is a headless
+  WebGL limitation, not a game defect. Verified from the scene graph instead; the street needs a
+  real phone check.
+
+## TAKEOVER STEP 3 — New vehicle: Volt Roadster ✅ DONE — 2026-10-17
+
+**Request:** *supercar class, `car-volt.png` as design guide, original design, **no brand name***,
+with roof railguns, hood missile pods, bumper plasma cannons, rear thrusters (short forward burst +
+cooldown + fuel) and side thrusters (fast 360° spin that dodges shots and knocks cars away).
+
+### Catalog — `shop-config.json` → `volt_roadster`
+Super class, top 42, accel 1.0, handling 1.05, HP 95, fuel 75, fuelUse 1.05, 1 mount slot,
+1250 coins, premium, `art: car-volt.png`. Balanced against the class it joins — the check asserts
+it lands inside the existing supers' ranges rather than being an outlier (`top 42 ∈ [38,46]`,
+`hp 95 ∈ [85,150]`, `fuel 75 ∈ [60,80]`).
+
+### Model — `buildHardpoints()`
+The four weapons are **read from the config's `hardpoints` array**, aligned to the real chassis, so
+the model and the catalog cannot drift apart: roof railguns (emitter tips forward), hood missile
+pods (boxed launchers, two tubes each), bumper plasma cannons, rear thruster nozzles (flared bells
+facing back). +Z is the nose — the exhaust flame already sits at −3.1.
+
+### Abilities — wired to the existing pads
+No HUD or input-layout change, because they reuse inputs the game already has:
+
+| ability | input | cost / gate | effect |
+|---|---|---|---|
+| **rear thruster** | BOOST pad / Space / Shift | 14 fuel, 7 s cooldown | `boostTime = 1.2 s` of forward thrust — the burst the Volt gets instead of the free boost |
+| **side thruster** | JUMP pad | 18 fuel, 9 s cooldown | 360° spin over 0.75 s, **0.45 s invulnerability**, knocks cars within 7 units away at force 16 |
+
+- The spin is applied to `c.chassis` (a child of the car group), so the lean/pitch `updateCar`
+  writes on `mesh.rotation.z/.x` is untouched, and the car lands flat on its original heading.
+- Dodge reuses **`cstate.invuln`** — the same flag the shield weapon uses, which damage and ramming
+  already skip. One rule to keep in sync, not two. The shield bubble shows during the window.
+- **The knock is a decaying displacement, not a velocity impulse.** `updateCar` rebuilds `c.vel`
+  from its forward/lateral components every frame and damps the lateral part at 6/s, so the first
+  implementation — an impulse on `c.vel` — was erased within a few frames and did **literally
+  nothing**. The shove now rides on the target as `shoveX`/`shoveZ`, decaying at 3/s and applied as
+  displacement where the AI (which only ever steers toward its target) cannot cancel it. Measured
+  **6.86 → 4.32 over 150 ms**, exactly the designed decay.
+- Cars without `thrusters.side` fall back to a normal jump on the JUMP pad; cars without rear
+  thrusters keep the free boost. **Other vehicles behave exactly as before.**
+- Both abilities refuse while wrecked, paused or finished, and refuse when unaffordable.
+
+### Three real bugs found while testing it
+1. **`setPlayerVehicle()` rebuilt the chassis but never added the hardpoints** — equipping the Volt
+   in the garage gave you a car with no railguns, pods or cannons. It now rebuilds hardpoints and
+   re-seeds thruster state (so a swap mid-session cannot inherit another car's cooldown).
+2. **An equipped vehicle never survived a page reload.** Boot only adopted the saved profile when
+   `coins`/`xp`/`gems`/`equippedSkin` differed — `equippedVehicle` was never compared, so you bought
+   and selected a new car, reloaded, and silently got the starter car back. Boot now rebuilds
+   through the **same `setPlayerVehicle()` path the garage uses**.
+
+3. **The side-thruster knock never worked, and my own test lied about it.** The shove was an
+   impulse on `c.vel`, which `updateCar` rebuilds from its forward/lateral components every frame —
+   so it vanished almost immediately. The test had been measuring the knocked car's *velocity*, and
+   a bot that happens to be driving reads ~5 either way: a **false positive** that looked like
+   proof. Fixed by moving the shove onto a decaying displacement, and the test now asserts on the
+   shove value itself (applied, then decaying 6.86 → 4.32) rather than on anything a bot's own
+   driving can fake. Distance travelled was rejected too — the bot revive path teleports a car to a
+   checkpoint, which produced an "impossible" 77 u reading.
+
+### Verification — `sim/step3-volt-check.mjs` — **ALL PASS** (17 assertions)
+Equip through the real garage path → hardpoints on the mesh (31 chassis children) → both thrusters
+fire with the right fuel/cooldown → cooldown blocks a re-fire → refuses when fuel < cost →
+invuln window = 0.45 s → **the knock is applied and decays on schedule** → **the pads themselves
+fire the abilities** (not just a debug call) → stats inside the class range → **the equipped car
+survives a reload** → 0 app errors.
+
+## TAKEOVER — Play-blocking bugs ✅ FIXED — 2026-10-17
+
+Reported directly: *"revive with 1 gem doesn't work… it's like I'm wrecked already"*, no way back
+to the main menu, garage unfinished and bigger than the screen, PLAY button dead. All four fixed
+and proven by **`sim/playability-check.mjs` — ALL PASS** against a real local server.
+
+1. **Revive did nothing** — root cause was not the button. `#onlineOverlay` (z21) **never closed
+   when a race started**, so its `.card` sat on top of `#reviveOverlay` (z20) and every tap landed
+   on the lobby. `startGame()` now closes the lobby. Second cause: the server rejected the revive
+   with `reason:'alive'` because bot/environment damage is local-only. The client now always sends
+   a `wrecked:` flag (no longer early-returns), the server mirrors it both ways, and the client
+   falls back to the local `payRevive` on **any** denial while genuinely wrecked.
+2. **No way back to the menu** — added `quitToMenu()` plus `#quitMenuBtn` (pause) and
+   `#outMenuBtn` (wrecked/out). Verified: `racing:false`, start screen visible, HUD hidden.
+3. **Garage broken** — `#garageGrid` was a 2-column grid holding exactly [tabs, list], squeezing
+   them side by side; `max-height:94vh` + 16 px overlay padding exceeded 100vh. Now `display:block`
+   with a scrollable list and sticky tabs. Verified to fit **844×390 and 800×360** with the close
+   button reachable and no horizontal document overflow.
+4. **PLAY button had no listener** — wired to `connectNet('quick')`.
+
+### Also found: the game wrecked you in ~2 s
+Measured both cars in practice: first wreck at **1.6–1.7 s**, and `lastAttacker` identified **a bot
+(`car #5`)**, not a wall — the grid is 2×3 cars packed on the start line with `invuln = 0`, so they
+pile up at the flag drop. Added **`SPAWN_GRACE = 1.5 s`** of invulnerability at the start (one
+named constant at the top of `main.js`; set it to `0` to remove). It reuses the existing invuln
+flag, so both damage and ramming skip the car and the wireframe bubble shows the protection.
+**Honest limit: this reduces the pile-up but does not eliminate it** — bots can still hit the car
+the moment grace expires. Bot aggression at the flag drop is a balance issue and is *not* fixed.
+
+## TAKEOVER — Per-user data isolation ✅ DONE — 2026-10-17
+
+*"include that each user data di'nt bridge, every ones data is secured… when we want to add sign up
+page."* Documented in **`SECURITY.md`**, implemented in `src/identity.js` + `src/storage.js`, and
+proved by **`sim/data-isolation-check.mjs` — ALL PASS** (14 assertions): per-account namespacing of
+profile / match history / sync queue, legacy save migrated exactly once, account B sees defaults
+while A sees its own 4242 coins, B reads 0 of A's matches, sign-out mints a fresh slot.
+
+`SECURITY.md` also spells out what sign-in must still do (server issues the uid, server owns
+authoritative progress, one-time guest upload then abandon, never trust the client `accountId`)
+and records the two real bridges found while writing it — the original single shared record, and a
+**pending 250 ms debounced save that would have been filed under the next account's id** after a
+switch. Both fixed; the second has its own regression test.
+
+## TAKEOVER — verification status
+
+| check | result |
+|---|---|
+| `sim/playability-check.mjs` (real local server) | **ALL PASS** |
+| `sim/step2-city-check.mjs` | **ALL PASS** — 480 draw calls, +33 |
+| `sim/step3-volt-check.mjs` | **ALL PASS** — 17 assertions |
+| `sim/data-isolation-check.mjs` | **ALL PASS** — 14 assertions |
+| `sim/no-emoji-check.mjs` | **ALL PASS** — 0 emoji / 0 broken / 0 invisible |
+| `npx vite build` | passes |
+
+**Next:** real-phone check of the street and the Volt (headless cannot composite WebGL).
+
 ## PHASE 14 — Premium Economy ⏸ PAUSED (Prompt 3 orders Phase 16 first)
 Work stopped mid-build (coins rename done in working tree, gold feats/shop not built). Resume after Prompt 3 Steps 1–3.
 **Goal:** Coins for grinders, gold for feats. Cosmetics-only premium.

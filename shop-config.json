@@ -16,7 +16,8 @@
       "currency": "coins",
       "free": true,
       "desc": "Balanced club racer. Free starter.",
-      "premium": false
+      "premium": false,
+      "art": "car-falcon.png"
     },
     {
       "id": "vortex_gt",
@@ -53,6 +54,93 @@
       "premium": true
     },
     {
+      "id": "volt_roadster",
+      "name": "VOLT ROADSTER",
+      "class": "super",
+      "top": 42,
+      "accel": 1.0,
+      "handling": 1.05,
+      "hp": 95,
+      "fuel": 75,
+      "fuelUse": 1.05,
+      "slots": 1,
+      "price": 1250,
+      "currency": "coins",
+      "free": false,
+      "premium": true,
+      "art": "car-volt.png",
+      "desc": "Supercar with fixed hardpoints: twin roof railguns, hood missile pods, bumper plasma cannons. Thrusters for a burst and a combat spin.",
+      "hardpoints": {
+        "roofRailguns": [
+          [
+            -0.44,
+            1.06,
+            0.1
+          ],
+          [
+            0.44,
+            1.06,
+            0.1
+          ]
+        ],
+        "hoodMissilePods": [
+          [
+            -0.52,
+            0.78,
+            1.5
+          ],
+          [
+            0.52,
+            0.78,
+            1.5
+          ]
+        ],
+        "bumperPlasma": [
+          [
+            -0.64,
+            0.45,
+            2.45
+          ],
+          [
+            0.64,
+            0.45,
+            2.45
+          ]
+        ],
+        "rearThrusters": [
+          [
+            -0.7,
+            0.52,
+            -2.5
+          ],
+          [
+            0.7,
+            0.52,
+            -2.5
+          ]
+        ]
+      },
+      "thrusters": {
+        "rear": {
+          "boost": 2.4,
+          "dur": 1.2,
+          "cooldown": 7.0,
+          "fuel": 14,
+          "desc": "Forward thrust burst"
+        },
+        "side": {
+          "spin": 360,
+          "dur": 0.75,
+          "cooldown": 9.0,
+          "fuel": 18,
+          "dodgeWindow": 0.45,
+          "knockRadius": 7.0,
+          "knockForce": 16.0,
+          "desc": "Fast 360 spin: dodges incoming shots and knocks nearby cars away"
+        }
+      }
+    },
+    {
       "id": "nebula",
       "name": "NEBULA RAY",
       "class": "scifi",
@@ -67,7 +155,8 @@
       "currency": "coins",
       "free": false,
       "desc": "Hover saucer. Corners on rails, sips fuel.",
-      "premium": false
+      "premium": false,
+      "art": "car-nebula.png"
     },
     {
       "id": "pulsar",
@@ -101,7 +190,8 @@
       "currency": "coins",
       "free": false,
       "desc": "Armor king. Slow but unstoppable.",
-      "premium": false
+      "premium": false,
+      "art": "car-bulwark.png"
     },
     {
       "id": "marauder",
@@ -152,7 +242,8 @@
       "currency": "coins",
       "free": false,
       "desc": "Siege hull. A wall with a turret.",
-      "premium": false
+      "premium": false,
+      "art": "car-tortoise.png"
     },
     {
       "id": "rhino",
@@ -186,7 +277,8 @@
       "currency": "coins",
       "free": false,
       "desc": "Three wheels, one rocket, no fear.",
-      "premium": false
+      "premium": false,
+      "art": "car-trike.png"
     },
     {
       "id": "doomkart",

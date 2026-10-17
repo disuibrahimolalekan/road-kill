@@ -45,6 +45,13 @@ import { logEvent, flushEvents, installCrashReporter } from './analytics.js';
 // ---------- CONFIG ----------
 const TOTAL_LAPS = 3;
 const ROAD_WIDTH = 22;
+// STEP 2: grace at the flag drop. The grid is 2x3 cars packed onto the start
+// line, so without this the bots piled into the player within ~1.7s of every
+// race (measured: 1.6-1.7s on both the starter car and the Volt) — which is
+// exactly why the game felt "already wrecked" the moment it began. Reuses the
+// existing invuln flag, so damage and ramming both skip the car for the first
+// moments and the wireframe bubble shows the protection. Set to 0 to remove.
+const SPAWN_GRACE = 1.5;
 const WALL_HEIGHT = 2.2;
 const TRACK_SAMPLES = 220;
 const CHECKPOINTS = 14;
@@ -406,6 +413,112 @@ function clearGroup(gr) {
     if (m.geometry) m.geometry.dispose();
   }
 }
+// ==================== STEP 2 — CITY STREET ====================
+// Real art for the road, sidewalks, buildings and roadside furniture.
+// Everything here is OPTIONAL: a failed image resolves to `false` and the
+// procedural material stays put, so a slow or blocked request can never leave
+// the world blank. Loads happen once at boot and the track is rebuilt when
+// they land — but only while no race is running.
+const CITY = { road: null, sidewalk: null, facade: [], cone: null, tree: null,
+               streetlight: null, tram: null, parkedcar: null };
+const CITY_TILING = new Set(['road', 'sidewalk', 'facade']); // cut-outs must NOT repeat
+
+function loadCityTexture(file, key, rx = 1, ry = 1) {
+  return new Promise((resolve) => {
+    try {
+      new THREE.TextureLoader().load('./art/' + file, (tex) => {
+        try { tex.colorSpace = THREE.SRGBColorSpace; } catch { /* older three */ }
+        if (CITY_TILING.has(key)) {
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(rx, ry);
+        }
+        if (key === 'facade') CITY.facade.push(tex); else CITY[key] = tex;
+        resolve(true);
+      }, undefined, () => resolve(false));   // missing file = keep the fallback
+    } catch { resolve(false); }
+  });
+}
+
+function startCityArt() {
+  Promise.all([
+    // road UVs run 1 across x 12 along the loop, so a modest repeat keeps the
+    // tile near square instead of smearing one photo down the whole circuit.
+    loadCityTexture('texture-road.png', 'road', 2, 3),
+    loadCityTexture('texture-sidewalk.png', 'sidewalk', 1, 1),
+    loadCityTexture('building-facade-1.png', 'facade', 1, 1),
+    loadCityTexture('building-facade-2.png', 'facade', 1, 1),
+    loadCityTexture('building-facade-3.png', 'facade', 1, 1),
+    loadCityTexture('texture-cone.png', 'cone'),
+    loadCityTexture('texture-tree.png', 'tree'),
+    loadCityTexture('streetlight.png', 'streetlight'),
+    loadCityTexture('tram.png', 'tram'),
+    loadCityTexture('parkedcar.png', 'parkedcar'),
+  ]).then(() => {
+    try {
+      // Rebuild so the material swaps and the new props take effect. Never
+      // during a live race — that would yank geometry out from under the cars.
+      if (!started && typeof buildTrack === 'function') buildTrack(currentTrackIdx);
+    } catch { /* world already usable without the art */ }
+  }).catch(() => {});
+}
+
+// Two crossed alpha-tested quads read as a solid object from any angle without
+// a billboard having to track the camera. alphaTest with opaque depth writing
+// means NO transparency sorting — that is what makes this safe to spray across
+// a phone-sized scene.
+function makeProp(tex, w, h) {
+  const mat = new THREE.MeshLambertMaterial({ map: tex, transparent: true,
+                                              alphaTest: 0.45, side: THREE.DoubleSide });
+  const g = new THREE.Group();
+  const a = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  a.position.y = h / 2;
+  const b = new THREE.Mesh(a.geometry, mat);
+  b.position.y = h / 2; b.rotation.y = Math.PI / 2;
+  g.add(a); g.add(b);
+  return g;
+}
+
+// Roadside furniture from the real art.
+// Every offset here is PAST the guardrail (walls sit at ROAD_WIDTH/2 + 0.7 =
+// 11.7), so no prop can ever land in the racing line — cars cannot reach them.
+function buildCityProps() {
+  const half = ROAD_WIDTH / 2;
+  const put = (i, side, off, tex, w, h) => {
+    if (!tex || !sampled[i]) return;
+    const p = sampled[i], tg = sampledTangents[i];
+    const nx = -tg.z, nz = tg.x, len = Math.hypot(nx, nz) || 1;
+    const m = makeProp(tex, w, h);
+    m.position.set(p.x + nx / len * off * side, 0, p.z + nz / len * off * side);
+    m.rotation.y = Math.atan2(tg.x, tg.z);
+    trackGroup.add(m);
+  };
+  // street lights: same cadence and offset as the procedural pole they replace
+  if (CITY.streetlight) {
+    for (let i = 0; i < TRACK_SAMPLES; i += 18) {
+      put(i, (i / 18) % 2 === 0 ? 1 : -1, half + 4.2, CITY.streetlight, 3.6, 7.2);
+    }
+  }
+  // parked cars along the kerb, staggered so they read as a street not a row
+  if (CITY.parkedcar) {
+    for (let i = 7; i < TRACK_SAMPLES; i += 26) {
+      put(i, (i / 26) % 2 === 0 ? -1 : 1, half + 5.0, CITY.parkedcar, 4.6, 2.6);
+    }
+  }
+  // trams: a few large pieces of street furniture, kept well clear of the road
+  if (CITY.tram) {
+    for (let i = 40; i < TRACK_SAMPLES; i += 120) {
+      put(i, i % 80 === 0 ? 1 : -1, half + 7.5, CITY.tram, 12, 5.1);
+    }
+  }
+  // cones just beyond the guardrail — close enough to read as a work zone
+  if (CITY.cone) {
+    for (let i = 3; i < TRACK_SAMPLES; i += 11) {
+      put(i, (i / 11) % 2 === 0 ? 1 : -1, half + 2.4, CITY.cone, 1.1, 1.3);
+    }
+  }
+}
+startCityArt();
+
 function buildTrack(idx) {
   currentTrackIdx = ((idx % TRACKS.length) + TRACKS.length) % TRACKS.length;
   clearGroup(trackGroup);
@@ -415,8 +528,10 @@ function buildTrack(idx) {
   for (let i = 0; i < TRACK_SAMPLES; i++) { const t = i / TRACK_SAMPLES; sampled.push(curve.getPoint(t)); sampledTangents.push(curve.getTangent(t).normalize()); }
   computeShortcutSegs(); // Phase 10: corridors before scenery (trees avoid them)
   const roadMatNew = IS_HIGH()
-    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: asphaltTex, roughness: 0.35, metalness: 0.18 })
-    : new THREE.MeshLambertMaterial({ color: 0x2a2a33 });
+    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: (CITY.road || asphaltTex), roughness: 0.35, metalness: 0.18 })
+    : (CITY.road
+        ? new THREE.MeshLambertMaterial({ color: 0xb8b8c0, map: CITY.road })
+        : new THREE.MeshLambertMaterial({ color: 0x2a2a33 }));
   roadMat = roadMatNew;
   const roadMesh = new THREE.Mesh(buildRoad(), roadMatNew);
   roadMesh.position.y = -0.02; roadMesh.receiveShadow = IS_HIGH(); trackGroup.add(roadMesh);
@@ -431,7 +546,9 @@ function buildTrack(idx) {
     // sidewalk beyond shoulder
     const sw = new THREE.Mesh(
       buildStrip(side * (ROAD_WIDTH / 2 + 1.6), side * (ROAD_WIDTH / 2 + 3.4), 0.0),
-      stdMat(0x4a4a52, 0.95, 0)
+      CITY.sidewalk
+        ? new THREE.MeshStandardMaterial({ map: CITY.sidewalk, color: 0xa8a8b0, roughness: 0.95, metalness: 0 })
+        : stdMat(0x4a4a52, 0.95, 0)
     );
     sw.receiveShadow = IS_HIGH(); trackGroup.add(sw);
   }
@@ -519,7 +636,11 @@ function buildTrack(idx) {
     const poleMat = stdMat(0x303036, 0.5, 0.7);
     const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe9a8 });
     const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd77a, transparent: true, opacity: 0.22 });
-    for (let i = 0; i < TRACK_SAMPLES; i += 18) {
+    // STEP 2: with the streetlight art loaded, buildCityProps() draws these
+    // very positions instead — running both would stand a 3D pole inside the
+    // picture. Starting past the end skips the loop without restructuring it,
+    // so a failed image load still falls back to the pole.
+    for (let i = CITY.streetlight ? TRACK_SAMPLES : 0; i < TRACK_SAMPLES; i += 18) {
       const side = (i / 18) % 2 === 0 ? 1 : -1;
       const p = sampled[i], tg = sampledTangents[i];
       const nx = -tg.z, nz = tg.x; const len = Math.hypot(nx, nz) || 1;
@@ -584,9 +705,16 @@ function buildTrack(idx) {
       const ang = (i / 26) * Math.PI * 2 + Math.random() * 0.2, r = 150 + Math.random() * 110;
       const x = Math.cos(ang) * r, z = Math.sin(ang) * r;
       const w = 8 + Math.random() * 10, h = 12 + Math.random() * 30, d = 8 + Math.random() * 10;
-      const mat = IS_HIGH()
-        ? new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.8, metalness: 0.2, emissive: 0xffffff, emissiveMap: windowTex, emissiveIntensity: 0.55 })
-        : new THREE.MeshLambertMaterial({ color: 0x3a3a45 });
+      // STEP 2: real facade art. The facade doubles as its OWN emissive map so
+      // the windows glow in their correct positions at night — the generic
+      // window grid would land at random offsets on a photograph.
+      const facadeTex = CITY.facade.length ? CITY.facade[i % CITY.facade.length] : null;
+      const mat = facadeTex
+        ? new THREE.MeshStandardMaterial({ map: facadeTex, color: 0xffffff, roughness: 0.85,
+            metalness: 0.06, emissive: 0xffffff, emissiveMap: facadeTex, emissiveIntensity: 0.35 })
+        : IS_HIGH()
+          ? new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.8, metalness: 0.2, emissive: 0xffffff, emissiveMap: windowTex, emissiveIntensity: 0.55 })
+          : new THREE.MeshLambertMaterial({ color: 0x3a3a45 });
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       b.position.set(x, h / 2 - 0.6, z); b.rotation.y = Math.random() * Math.PI;
       trackGroup.add(b); bldMats.push(mat);
@@ -599,10 +727,19 @@ function buildTrack(idx) {
       for (let s = 0; s < TRACK_SAMPLES; s += 10) { const dx = sampled[s].x - x, dz = sampled[s].z - z; if (dx * dx + dz * dz < 20 * 20) { onRoad = true; break; } }
       if (onRoad) continue;
       if (inShortcut(x, z, 4)) continue; // Phase 10: keep secret cuts clear
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2.4, 6), treeTrunk);
-      trunk.position.set(x, 1.2, z); trackGroup.add(trunk);
-      const top = new THREE.Mesh(new THREE.ConeGeometry(1.8 + Math.random(), 4 + Math.random() * 2, 8), treeTop);
-      top.position.set(x, 4.4, z); top.castShadow = IS_HIGH(); trackGroup.add(top);
+      if (CITY.tree) {
+        // STEP 2: real tree art instead of a green cone — crossed alpha quads,
+        // the same two meshes per tree the cone used, so no extra draw calls.
+        const th = 6 + Math.random() * 3.5;
+        const tm = makeProp(CITY.tree, th * 0.8, th);
+        tm.position.set(x, 0, z); tm.rotation.y = Math.random() * Math.PI;
+        trackGroup.add(tm);
+      } else {
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2.4, 6), treeTrunk);
+        trunk.position.set(x, 1.2, z); trackGroup.add(trunk);
+        const top = new THREE.Mesh(new THREE.ConeGeometry(1.8 + Math.random(), 4 + Math.random() * 2, 8), treeTop);
+        top.position.set(x, 4.4, z); top.castShadow = IS_HIGH(); trackGroup.add(top);
+      }
     }
     const hillMat = stdMat(0x14301c, 1.0, 0);
     for (let i = 0; i < 10; i++) {
@@ -615,6 +752,7 @@ function buildTrack(idx) {
   applyTimeOfDay(todPhase); // auto-cycle is driven per-frame; gameTime not yet initialized here
   buildFeatureMeshes(); // Phase 10: shortcut strips, hazards, ramps
   buildBannerMeshes(); // Phase 11: brand + people banners from banners-config.json
+  buildCityProps(); // STEP 2: street lights, parked cars, trams, cones (no-op until the art lands)
 }
 function buildRoad(){
   const pos=[], idx=[], uv=[];
@@ -710,13 +848,20 @@ async function renderHistory(){
 (async () => {
   try {
     const unified = await loadProfileUnified();
-    if (unified && (unified.coins !== profile.coins || unified.xp !== profile.xp || unified.gems !== profile.gems || unified.equippedSkin !== profile.equippedSkin)) {
+    if (unified && (unified.coins !== profile.coins || unified.xp !== profile.xp || unified.gems !== profile.gems || unified.equippedSkin !== profile.equippedSkin || unified.equippedVehicle !== profile.equippedVehicle)) {
+      const prevVehicle = profile.equippedVehicle;
       profile = unified;
       migrateShop(profile);
       refreshEconHUD();
       if (typeof player !== 'undefined' && player && player.body) {
         const skin = GARAGE_SKINS.find((k) => k.id === profile.equippedSkin);
         if (skin) { player.body.material.color.setHex(skin.color); if(player.underglow) player.underglow.material.color.setHex(skin.color); player.color = skin.color; }
+        // STEP 3: the saved ride has to come back after a reload. This block
+        // only compared coins/xp/gems/skin, so equipping a different vehicle
+        // never survived a page load — the player quietly got the starter car
+        // back (stats, mounts and the Volt's hardpoints included). Rebuilt
+        // through setPlayerVehicle so it is the SAME path the garage uses.
+        if (profile.equippedVehicle && profile.equippedVehicle !== prevVehicle) setPlayerVehicle(profile.equippedVehicle);
       }
     }
   } catch {}
@@ -969,6 +1114,105 @@ function mountsFor(c) {
 }
 
 // ---------- CAR FACTORY ----------
+// ==================== STEP 3 — VOLT ROADSTER ====================
+// Housings are decorative and their positions come from shop-config.json so the
+// model and the catalog cannot drift apart. The two abilities are gated
+// identically: not while wrecked/paused/finished, a cooldown, and a fuel cost
+// paid up front — the same budget the shop promises.
+function thrusterSpec(c, kind) {
+  const spec = vehicleSpec(c.vehicleId);
+  return (spec && spec.thrusters && spec.thrusters[kind]) ? spec.thrusters[kind] : null;
+}
+function thrusterReady(c, kind) {
+  return !!(c.thrusterCd && c.thrusterCd[kind] <= 0) && started && !paused && !finished
+    && c.cstate && !c.cstate.wrecked;
+}
+
+function buildHardpoints(chassis, spec, color) {
+  const hp = spec.hardpoints || {};
+  const gun = stdMat(0x33333f, 0.35, 0.85);
+  const pod = stdMat(0x24242e, 0.6, 0.4);
+  const tip = new THREE.MeshBasicMaterial({ color: 0x2de2ff });
+  // +Z is the nose (the exhaust flame already sits at -3.1) and -Z the tail.
+  const add = (geo, mat, p, rot) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(p[0], p[1], p[2]);
+    if (rot) { m.rotation.x = rot[0]; m.rotation.y = rot[1] || 0; m.rotation.z = rot[2] || 0; }
+    chassis.add(m);
+    return m;
+  };
+  // twin roof railguns — long rails aimed forward, glowing emitter tips
+  for (const p of (hp.roofRailguns || [])) {
+    add(new THREE.CylinderGeometry(0.11, 0.11, 1.9, 8), gun, p, [Math.PI / 2, 0, 0]);
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), tip, [p[0], p[1], p[2] + 1.1], [Math.PI / 2, 0, 0]);
+  }
+  // hood missile pods — boxed launchers, two tubes each
+  for (const p of (hp.hoodMissilePods || [])) {
+    add(new THREE.BoxGeometry(0.42, 0.3, 1.0), pod, p);
+    add(new THREE.CylinderGeometry(0.08, 0.08, 0.18, 6), gun, [p[0] - 0.09, p[1] + 0.04, p[2] + 0.5], [Math.PI / 2, 0, 0]);
+    add(new THREE.CylinderGeometry(0.08, 0.08, 0.18, 6), gun, [p[0] + 0.09, p[1] + 0.04, p[2] + 0.5], [Math.PI / 2, 0, 0]);
+  }
+  // bumper plasma cannons — short heavy barrels on the nose
+  for (const p of (hp.bumperPlasma || [])) {
+    add(new THREE.CylinderGeometry(0.17, 0.2, 0.6, 10), gun, p, [Math.PI / 2, 0, 0]);
+    add(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 10), tip, [p[0], p[1], p[2] + 0.32], [Math.PI / 2, 0, 0]);
+  }
+  // rear thruster nozzles — flared bells facing backwards
+  for (const p of (hp.rearThrusters || [])) {
+    add(new THREE.CylinderGeometry(0.22, 0.34, 0.55, 10), pod, p, [Math.PI / 2, 0, 0]);
+    add(new THREE.CylinderGeometry(0.2, 0.2, 0.04, 10), tip, [p[0], p[1], p[2] - 0.3], [Math.PI / 2, 0, 0]);
+  }
+}
+
+// Rear thrusters: a short forward burst on the boost input, gated by cooldown
+// and fuel instead of the free boost every other car gets.
+function fireRearThruster(c) {
+  const t = thrusterSpec(c, 'rear');
+  if (!t || !thrusterReady(c, 'rear')) return false;
+  if (c.fuel < t.fuel) { if (c.isPlayer) popCoins('LOW FUEL', ''); return false; }
+  c.fuel = Math.max(0, c.fuel - t.fuel);
+  c.thrusterCd.rear = t.cooldown;
+  c.boostTime = t.dur;                     // reuse the boost channel = forward thrust
+  if (c.isPlayer) { sfx('boost'); popCoins(icon('bolt') + ' THRUSTER BURST', ''); }
+  return true;
+}
+
+// Side thrusters: a fast 360 spin. Setting invuln reuses the exact flag the
+// shield weapon uses, so projectiles and ramming cars both skip the car for the
+// dodge window — no second, parallel "dodging" rule to keep in sync.
+function fireSideThruster(c) {
+  const t = thrusterSpec(c, 'side');
+  if (!t || !thrusterReady(c, 'side')) return false;
+  if (c.fuel < t.fuel) { if (c.isPlayer) popCoins('LOW FUEL', ''); return false; }
+  c.fuel = Math.max(0, c.fuel - t.fuel);
+  c.thrusterCd.side = t.cooldown;
+  c.spinT = t.dur; c.spinPhase = 0;
+  c.cstate.invuln = Math.max(c.cstate.invuln || 0, t.dodgeWindow);
+  knockAway(c, t.knockRadius || 7, t.knockForce || 16);
+  if (c.isPlayer) { sfx('boost'); popCoins(icon('bolt') + ' DODGE SPIN', ''); }
+  return true;
+}
+
+// Shove every drivable car within radius away, strongest up close. Cars already
+// integrate a real velocity vector, so an impulse here sticks (the existing
+// side-impact separation at the car-car check does the same thing).
+function knockAway(c, rad, force) {
+  for (const t of cars) {
+    if (t === c || t.out || (t.cstate && t.cstate.wrecked)) continue;
+    const dx = t.pos.x - c.pos.x, dz = t.pos.z - c.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > rad || d < 0.001) continue;
+    const f = force * (1 - d / rad);
+    // Carried on the target as a decaying displacement, NOT an impulse on
+    // c.vel: the grip model rebuilds c.vel from its forward/lateral components
+    // every frame and damps the lateral part at 6/s, so a sideways impulse is
+    // erased before it can be seen. See the updateCar block for the decay.
+    t.shoveX = (t.shoveX || 0) + (dx / d) * f;
+    t.shoveZ = (t.shoveZ || 0) + (dz / d) * f;
+    t.stuckTime = 0;   // do not let the anti-stuck logic undo the shove
+  }
+}
+
 function makeCar(color, isPlayer, idx){
   const g=new THREE.Group();
   const effColor = (isPlayer && profile.equippedSkin) ? (GARAGE_SKINS.find(k=>k.id===profile.equippedSkin)?.color ?? color) : color;
@@ -1006,6 +1250,11 @@ function makeCar(color, isPlayer, idx){
   applyVehicleStats(car, isPlayer);
   resetMounts(car.cstate, mountsFor(car));
   tryFitModel(car, spec); // glTF if configured, else stays procedural
+  // STEP 3: Volt Roadster hardpoint housings + per-car thruster state.
+  if (spec.hardpoints) buildHardpoints(ch.chassis, spec, effColor);
+  car.thrusterCd = { rear: 0, side: 0 };
+  car.spinT = 0; car.spinPhase = 0;
+  car.shoveX = 0; car.shoveZ = 0;   // STEP 3: side-thruster knock displacement
   return car;
 }
 const cars=[];
@@ -1019,7 +1268,7 @@ function placeCars(){
   cars.forEach((c,i)=>{
     const col=offsets[i], row=rows[Math.floor(i/3)];
     c.pos.set(start.x - tg.x*(-row) + nnx*col, 0, start.z - tg.z*(-row) + nnz*col);
-    c.yaw=Math.atan2(tg.x,tg.z); c.vel.set(0,0,0); c.speed=0; c.lap=0; c.checkpoint=0; c.trackIdx=0; c.progress=0; c.boostTime=0; c.stuckTime=0; c.targetIdx=10+i*3; c.fireCooldown=0; c.dodgeDir=0; c.vy=0; c.jumpY=0; c.airborne=false; c.oilT=0; c.rampCd=0;
+    c.yaw=Math.atan2(tg.x,tg.z); c.vel.set(0,0,0); c.speed=0; c.lap=0; c.checkpoint=0; c.trackIdx=0; c.progress=0; c.boostTime=0; c.stuckTime=0; c.targetIdx=10+i*3; c.fireCooldown=0; c.dodgeDir=0; c.vy=0; c.jumpY=0; c.airborne=false; c.oilT=0; c.rampCd=0; c.shoveX=0; c.shoveZ=0;   // no leftover knock from last race
     // Phase 8: fresh fuel + mounted reserve each race; clear out flags
     // Phase 9: re-derive stats (upgrades may have changed in garage)
     applyVehicleStats(c, c.isPlayer);
@@ -1027,7 +1276,7 @@ function placeCars(){
     resetMounts(c.cstate, mountsFor(c));
     c.mesh.visible=true;
     lowFuelWarned=false;
-    c.cstate.health=c.maxHP; c.cstate.maxHealth=c.maxHP; c.cstate.wrecked=false; c.cstate.invuln=0; c.cstate.shield=0; c.cstate.disabled=0; c.cstate.weapon=null; c.cstate.damageFlash=0; c.cstate.lastAttacker=null;
+    c.cstate.health=c.maxHP; c.cstate.maxHealth=c.maxHP; c.cstate.wrecked=false; c.cstate.invuln=SPAWN_GRACE; c.cstate.shield=0; c.cstate.disabled=0; c.cstate.weapon=null; c.cstate.damageFlash=0; c.cstate.lastAttacker=null;
     c.mesh.position.copy(c.pos); c.mesh.rotation.y=c.yaw; c.mesh.visible=true; c.body.material.transparent=false; c.body.material.opacity=1;
     c.shieldMesh.visible=false; c.smoke.material.opacity=0;
   });
@@ -1301,7 +1550,25 @@ function wireNet(n) {
   // Phase 12: server-owned revive verdict (gems deducted server-side).
   n.onReviveOk = (m) => {
     pendingRevive = false;
-    if(!m.ok){ popCoins(`REVIVE: ${m.reason || 'denied'}`,''); showReviveOverlay(); return; }
+    if(!m.ok){
+      // STEP 2: the server denied the revive but we ARE wrecked locally. Bot,
+      // wall, roadblock, mine and hazard damage are all local to the client,
+      // so a server that has not yet learned of the wreck answers 'alive' — and
+      // before this fix that dead-ended the player with the car frozen and no
+      // way out. ANY denial while genuinely wrecked falls back to the local
+      // path, which still charges gems through payRevive(). The player pays
+      // either way; they are just never left stranded.
+      if(player.cstate && player.cstate.wrecked){
+        const res = payRevive(profile, player.cstate.revivesUsed);
+        if(!res.ok){ popCoins('NOT ENOUGH GEMS',''); showReviveOverlay(); return; }
+        refreshEconHUD(); persistProfile(true); popCoins(`-${res.cost} ${icon('gems')}`,'gem');
+        window.__rkRevivePath = 'local-fallback';
+        applyPlayerRevive();
+        return;
+      }
+      popCoins(`REVIVE: ${m.reason || 'denied'}`,''); showReviveOverlay(); return;
+    }
+    window.__rkRevivePath = 'server';
     if(typeof m.gems === 'number') profile.gems = m.gems;
     refreshEconHUD(); persistProfile(true);
     popCoins(`-${m.cost} ${icon('gems')} (server)`,'gem');
@@ -1402,6 +1669,13 @@ if (quickMatchBtn) quickMatchBtn.addEventListener('click', () => connectNet('qui
 if (joinCodeBtn) joinCodeBtn.addEventListener('click', () => connectNet('code'));
 const practiceBtn = document.getElementById('practiceBtn');
 if (practiceBtn) practiceBtn.addEventListener('click', () => connectNet('practice'));
+// STEP 2: the PLAY button on the start screen had NO listener anywhere, so the
+// main action of the game silently did nothing. The document-level tap-to-
+// connect handler explicitly ignores taps on <button>, which is why it looked
+// like the button was broken rather than dead. Wire it to the same quick-match
+// path the lobby uses.
+const playBtn = document.getElementById('playBtn');
+if (playBtn) playBtn.addEventListener('click', () => connectNet('quick'));
 const hostBtn = document.getElementById('hostBtn');
 if (hostBtn) hostBtn.addEventListener('click', () => connectNet('host'));
 const lobbyPanel = document.getElementById('lobbyPanel');
@@ -1496,12 +1770,15 @@ if (claimSeasonBtn) claimSeasonBtn.addEventListener('click', () => {
 });
 setInterval(() => {
   if (netMode !== 'online' || !net || !net.online || !started || paused || finished) return;
-  if (player.cstate.wrecked) return;
+  // STEP 2: keep reporting while wrecked, and report the real flag. Bot and
+  // environment damage are local-only, so the server has no idea we are
+  // wrecked unless we say so — its own copy still thought we were driving and
+  // it denied every revive with reason:'alive', leaving the car frozen forever.
   try {
     net.sendInput({
       steer: 0, accel: 1, boost: player.boostTime > 0, fire: false,
       pos: player.pos, yaw: player.yaw, speed: player.speed,
-      hp: player.cstate.health, wrecked: false, lap: player.lap,
+      hp: player.cstate.health, wrecked: !!player.cstate.wrecked, lap: player.lap,
       fuel: Math.round(player.fuel), // Phase 12: server clamps 0..fuelMax
     });
   } catch {}
@@ -2221,6 +2498,9 @@ addEventListener('keyup',e=>{ if(e.key.toLowerCase()==='j'||e.key==='x'||e.key==
 function tryPlayerJump(){
   if (!started || paused || finished) return;
   if (player.cstate.wrecked || player.airborne) return;
+  // STEP 3: cars with side thrusters spend the jump input on the 360 dodge spin
+  // instead of jumping.
+  if (thrusterSpec(player, 'side')) { fireSideThruster(player); return; }
   player.vy = 9.5; player.airborne = true;
   sfx('jump');
 }
@@ -2343,7 +2623,15 @@ document.addEventListener('click', (e) => {
   openOnline();
   connectNet('quick');
 });
-function startGame(){ started=true; document.body.classList.add('racing'); centerMsg.style.display='none'; try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
+function startGame(){ started=true; document.body.classList.add('racing'); centerMsg.style.display='none';
+  // STEP 2: the lobby was never closed when the race began. #onlineOverlay sits
+  // at z-index 21, ABOVE #reviveOverlay (20), so its .card covered the revive
+  // button — the player could read "REVIVE — 1 GEM" yet every tap landed on the
+  // lobby card and nothing happened. The button was never broken; it was
+  // buried. connectNet('practice'/'quick') opens the overlay for status and the
+  // only code that closed it was n.onStart, which practice mode does not emit.
+  closeOnline();
+  try{ logEvent('race_start', { track: TRACKS[currentTrackIdx].id, mode: netMode }); }catch{} }
 function restart(){
   placeCars(); spawnPickups(); resetRoadblocks(); for(const s of shortcutSegs) s.claimed=false; bannerViewed.clear(); if(likeBtn) likeBtn.classList.remove('show'); finished=false; started=true; gameTime=0; shake=0; hitFlashTimer=0; hideReviveOverlay(); hideOutOverlay();
   spectating=false; if(spectateBadge) spectateBadge.classList.remove('show');
@@ -2364,6 +2652,34 @@ function restart(){
   centerMsg.style.display='none'; pauseTitle.textContent='PAUSED'; pauseSub.textContent='Press RESUME to continue'; document.getElementById('restartBtn').textContent='RESTART RACE';
   killFeedEl.innerHTML='';
 }
+// STEP 2: there was no way back to the start screen. body.racing is added by
+// startGame() and is never removed by any game code or button, so once a race
+// began the start menu could never reappear — the only exit was reloading the
+// page. Used by the MAIN MENU button on the pause screen (which is also the
+// finish screen) and on the wrecked-out screen.
+function quitToMenu(){
+  // ORDER MATTERS: n.onDisconnect shows the "DISCONNECTED" pause screen when
+  // started && !finished, so both must be cleared BEFORE net.disconnect().
+  started=false; finished=true; paused=false; spectating=false; pendingRevive=false;
+  hideReviveOverlay(); hideOutOverlay();
+  pauseOverlay.classList.remove('show');
+  if(garageOverlay) garageOverlay.classList.remove('show');
+  if(onlineOverlay) onlineOverlay.classList.remove('show');
+  if(spectateBadge) spectateBadge.classList.remove('show');
+  touchSteer=0; touchAccel=0; fireHeld=false; lowFuelWarned=false;   // no stuck inputs
+  try{ if(net) net.disconnect(); }catch{}
+  setOnlineMode(false);
+  document.body.classList.remove('racing');   // #startScreen back, #hud hidden
+  placeCars();                                // clean grid for the menu camera orbit
+  centerMsg.style.display='none';
+  pauseTitle.textContent='PAUSED'; pauseSub.textContent='Press RESUME to continue';
+  const rb=document.getElementById('restartBtn'); if(rb) rb.textContent='RESTART RACE';
+  killFeedEl.innerHTML='';
+}
+const quitMenuBtn = document.getElementById('quitMenuBtn');
+if(quitMenuBtn) quitMenuBtn.addEventListener('click', quitToMenu);
+const outMenuBtn = document.getElementById('outMenuBtn');
+if(outMenuBtn) outMenuBtn.addEventListener('click', () => { hideOutOverlay(); quitToMenu(); });
 
 function nearestTrackIdx(pos){
   let best=0, bestD=Infinity;
@@ -2507,7 +2823,11 @@ function updateCar(c, dt, isPlayerCar){
   // boost
   if(cs.disabled>0) wantBoost=false; // Phase 9 EMP fries boost
   if(wantBoost && c.boostTime>=0){
-    if(c.boostTime<=0 && isPlayerCar){ if(boostHeld) c.boostTime=2.4; }
+    if(c.boostTime<=0 && isPlayerCar && boostHeld){
+      // STEP 3: cars with rear thrusters spend the boost input on their own
+      // burst — gated by cooldown and fuel — instead of the free generic boost.
+      if(thrusterSpec(c, 'rear')) fireRearThruster(c); else c.boostTime=2.4;
+    }
     if(c.boostTime>0){ c.boostTime-=dt; if(c.boostTime<0) c.boostTime=0; }
   } else if(!wantBoost && !isPlayerCar){ if(c.boostTime>0) c.boostTime-=dt; }
   const boosting=c.boostTime>0;
@@ -2537,6 +2857,19 @@ function updateCar(c, dt, isPlayerCar){
   const steerEff=Math.min(1,speedAbs/8)*(1-Math.min(0.45,speedAbs/curMax*0.35))*perf.handling*(c.handlingMult||1)*(c.oilT>0?HAZARD_TUNING.oil.handlingMult:1);
   c.yaw+= steerInput*2.05*steerEff*dt*(velDotFwd<0?-1:1);
   c.pos.x+=c.vel.x*dt; c.pos.z+=c.vel.z*dt; c.pos.y=0;
+  // STEP 3 — the side-thruster knock. Deliberately NOT an impulse on c.vel:
+  // the grip model above rebuilds c.vel from its forward/lateral components
+  // every frame and damps the lateral part at 6/s, so any sideways impulse is
+  // erased within a few frames and the shove is invisible. This is a separate
+  // decaying displacement instead — it moves the car directly, so the driver
+  // (and the AI, which only ever steers toward its target) cannot cancel it.
+  if (c.shoveX || c.shoveZ) {
+    c.pos.x += c.shoveX * dt; c.pos.z += c.shoveZ * dt;
+    const k = Math.max(0, 1 - 3.0 * dt);
+    c.shoveX *= k; c.shoveZ *= k;
+    if (Math.abs(c.shoveX) < 0.01) c.shoveX = 0;
+    if (Math.abs(c.shoveZ) < 0.01) c.shoveZ = 0;
+  }
   // wall collision with damage (Phase 10: secret-cut corridors are exempt)
   const near=nearestTrackIdx(c.pos); c.trackIdx=near.idx; const distFromCenter=near.dist; const half=ROAD_WIDTH/2;
   const cut=inShortcut(c.pos.x, c.pos.z, 0);
@@ -2622,6 +2955,24 @@ function updateCar(c, dt, isPlayerCar){
   const hoverBob = 0.15 + Math.sin(gameTime*8 + (c.isPlayer?0:c.trackIdx))*0.04;
   c.mesh.position.set(c.pos.x, hoverBob + (c.jumpY || 0), c.pos.z);
   c.mesh.rotation.y=c.yaw;
+  // STEP 3: thruster cooldowns, and the side-thruster 360 spin. The spin is
+  // applied to the chassis (a child of the car group) so the lean/pitch that
+  // updateCar writes on mesh.rotation.z/.x is untouched, and it lands flat on
+  // the original heading when it ends.
+  if (c.thrusterCd) {
+    if (c.thrusterCd.rear > 0) c.thrusterCd.rear = Math.max(0, c.thrusterCd.rear - dt);
+    if (c.thrusterCd.side > 0) c.thrusterCd.side = Math.max(0, c.thrusterCd.side - dt);
+  }
+  if (c.spinT > 0) {
+    const sv = vehicleSpec(c.vehicleId);
+    const spinDur = (sv && sv.thrusters && sv.thrusters.side && sv.thrusters.side.dur) || 0.75;
+    c.spinT = Math.max(0, c.spinT - dt);
+    c.spinPhase += (Math.PI * 2 / spinDur) * dt;   // one full revolution, constant rate
+    if (c.chassis) c.chassis.rotation.y = c.spinPhase;
+    if (c.spinT <= 0) c.spinPhase = 0;
+  } else if (c.chassis && c.chassis.rotation.y !== 0) {
+    c.chassis.rotation.y = 0;
+  }
   c.mesh.rotation.z = -steerInput*Math.min(0.35,speedAbs/30);
   c.mesh.rotation.x = (velDotFwd>0? accelInput: -accelInput)*0.07;
   if(boosting){ c.flame.material.opacity=0.9; c.flame.scale.set(1+Math.random()*0.3,1,1); }
@@ -2951,6 +3302,12 @@ function setPlayerVehicle(vid){
   applyVehicleStats(player, true);
   resetMounts(player.cstate, mountsFor(player));
   tryFitModel(player, spec);
+  // STEP 3: the hardpoint housings ride along with the chassis rebuild, and
+  // thruster state is re-seeded so swapping cars mid-session cannot inherit
+  // another ride's cooldown or a half-finished spin.
+  if (spec.hardpoints) buildHardpoints(player.chassis, spec, hex);
+  player.thrusterCd = { rear: 0, side: 0 };
+  player.spinT = 0; player.spinPhase = 0;
   return true;
 }
 // Unified shop purchase: solo = local check+charge; online = server decides (BUY_OK).
@@ -3415,7 +3772,87 @@ bootWorld();
 // real WebGL framebuffer and scene state instead of guessing from screenshots.
 // STEP 1: layout tests drive the real functions instead of faking the DOM.
 window.__rkDebug = { renderer, scene, camera, showConnState, startWakeCountdown, stopWakeCountdown,
-                     setRacing: v => document.body.classList.toggle('racing', !!v) };
+                     setRacing: v => document.body.classList.toggle('racing', !!v),
+                     // STEP 2: test hooks. The revive path can only be reached by
+                     // being wrecked mid-race, and the defect we fixed was the
+                     // server answering reason:'alive' to a player it did not know
+                     // was wrecked — so a harness has to be able to set that state
+                     // up and deliver the denial without a live multiplayer match.
+                     wreckPlayer: () => { const cs = player.cstate; cs.health = 0; cs.wrecked = true; showReviveOverlay(); return true; },
+                     playerState: () => ({ wrecked: !!(player.cstate && player.cstate.wrecked),
+                                            revives: player.cstate ? player.cstate.revivesUsed : null,
+                                            gems: profile ? profile.gems : null }),
+                     denyRevive: () => { if (net && net.onReviveOk) { net.onReviveOk({ ok:false, reason:'alive' }); return true; } return false; },
+                     isOnlineMode: () => isOnline(),
+                     quitToMenu: () => quitToMenu(),
+                     // STEP 3: Volt Roadster test hooks. Its abilities are only
+                     // reachable mid-race on a car that carries them, so a
+                     // harness needs to equip it, read its state, and put a
+                     // victim car inside the knock radius.
+                     equipVehicle: (id) => {
+                       // Test hook: grant ownership, then equip through the
+                       // normal path so the harness exercises exactly what the
+                       // garage does (no reload needed — it rebuilds in place).
+                       if (!profile.vehicles.includes(id)) profile.vehicles.push(id);
+                       return setPlayerVehicle(id);
+                     },
+                     carInfo: () => {
+                       const cs = player.cstate;
+                       return {
+                         vehicleId: player.vehicleId || (cs && cs.vehicleId) || null,
+                         chassisKids: player.chassis ? player.chassis.children.length : 0,
+                         hasThrusters: !!thrusterSpec(player, 'rear'),
+                         thrusters: { rear: thrusterSpec(player, 'rear'), side: thrusterSpec(player, 'side') },
+                         rearCd: player.thrusterCd ? +player.thrusterCd.rear.toFixed(2) : null,
+                         sideCd: player.thrusterCd ? +player.thrusterCd.side.toFixed(2) : null,
+                         started: !!started, paused: !!paused, finished: !!finished,
+                         fuel: Math.round(player.fuel), boostTime: +player.boostTime.toFixed(2),
+                         invuln: +(player.cstate.invuln || 0).toFixed(2), spinT: +player.spinT.toFixed(2),
+                         wrecked: !!(player.cstate && player.cstate.wrecked), airborne: !!player.airborne,
+                         lastAttacker: (player.cstate && player.cstate.lastAttacker != null) ? player.cstate.lastAttacker : null,
+                         speed: +player.speed.toFixed(1),
+                       };
+                     },
+                     repair: () => {
+                       const cs = player.cstate;
+                       cs.health = cs.maxHealth || 100;
+                       cs.wrecked = false; player.out = false;
+                       hideReviveOverlay(); hideOutOverlay();
+                       return true;
+                     },
+                     setFuel: (n) => { player.fuel = n; return player.fuel; },
+                     putBotNear: (dist) => {
+                       const b = cars.find((c) => !c.isPlayer && !c.out && c.cstate && !c.cstate.wrecked);
+                       if (!b) return null;
+                       b.pos.set(player.pos.x + dist, 0, player.pos.z);
+                       b.vel.set(0, 0, 0);
+                       b.shoveX = 0; b.shoveZ = 0;
+                       window.__rkKnockBot = b;
+                       window.__rkKnockBotHome = { x: b.pos.x, z: b.pos.z };
+                       return { botIdx: b.idx, vel: Math.hypot(b.vel.x, b.vel.z) };
+                     },
+                     knockSpeed: () => {
+                       const b = window.__rkKnockBot;
+                       return b ? Math.hypot(b.vel.x, b.vel.z) : null;
+                     },
+                     // How far the knocked car has actually been displaced from
+                     // where it was placed, plus the shove still pending on it.
+                     // VELOCITY IS NOT A VALID MEASUREMENT HERE: the grip model
+                     // rebuilds c.vel from its forward/lateral components every
+                     // frame, so a shoved car reads ~0 even while sliding — and
+                     // a bot that happens to be accelerating reads high without
+                     // having been knocked at all. Measure the position.
+                     botDisplacement: () => {
+                       const b = window.__rkKnockBot, h = window.__rkKnockBotHome;
+                       if (!b || !h) return null;
+                       return {
+                         dist: +Math.hypot(b.pos.x - h.x, b.pos.z - h.z).toFixed(2),
+                         shove: +Math.hypot(b.shoveX || 0, b.shoveZ || 0).toFixed(2),
+                       };
+                     },
+                     fireRear: () => fireRearThruster(player),
+                     fireSide: () => fireSideThruster(player),
+                     resetThrusters: () => { player.thrusterCd = { rear: 0, side: 0 }; player.spinT = 0; player.spinPhase = 0; player.cstate.invuln = 0; player.boostTime = 0; } };
 
 // ---------- PHASE 16 hidden debug panel: tap top-left corner 3x ----------
 const debugPanel = document.getElementById('debugPanel');

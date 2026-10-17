@@ -3,13 +3,37 @@
 // LocalStorage for settings/session (audio, controls, last car).
 // Sync-queue stub shaped like future backend API calls.
 import { createDefaultProfile, getLevelFromXP, getTier } from './economy.js';
+import { accountId, lsKey, setAccountId, signOut, isGuest, onAccountChange } from './identity.js';
 
 export const DB_NAME = 'roadkill-db';
 export const DB_VERSION = 1;
-export const PROFILE_ID = 'main';
-export const LEGACY_PROFILE_KEY = 'rk.profile.v2';
+
+// STEP 2 — per-account namespacing. Everything a player *owns* (currency,
+// unlocks, XP, stats, match history, queued sync ops) is addressed through
+// accountId(), so two people on one browser can never read or write each
+// other's record. The old keys are kept only as one-shot migration sources.
+// See src/identity.js for the security model and its limits.
+export const LEGACY_PROFILE_ID = 'main';           // pre-namespacing IDB record
+export const LEGACY_PROFILE_KEY = 'rk.profile.v2'; // pre-namespacing LS mirror
+export const LEGACY_SYNC_LS_KEY = 'rk.syncqueue.v1';
+
+/** IDB record key for the active account's profile. */
+export const profileKey = () => `${accountId()}:profile`;
+/** localStorage key for a named per-account value. Defined in identity.js
+ *  (the namespace owner) and re-exported here for existing callers. */
+// The whole account API is re-exported from the namespace owner so callers get
+// ONE instance of identity.js. Importing './identity.js' separately instead
+// gives you a second copy under the dev server (Vite stamps its own imports
+// with ?t=<mtime>), and switching accounts through that copy would move the
+// key builder without moving storage's — the namespace would silently split.
+export { accountId, lsKey, setAccountId, signOut, isGuest, onAccountChange };
+
+// Settings stay DEVICE-scoped on purpose: audio, quality, touch controls and
+// orientation are properties of the handset, not of the player, and main.js
+// reads this key directly in three places. They carry no progress, so there
+// is nothing to bridge between accounts.
 export const SETTINGS_KEY = 'rk.settings.v1';
-export const SYNC_LS_FALLBACK_KEY = 'rk.syncqueue.v1';
+export const syncQueueKey = () => lsKey('syncqueue.v1');
 
 function normalizeProfile(p) {
   const d = createDefaultProfile();
@@ -102,37 +126,74 @@ export function idbClear(store) {
 // ---------- Profile (IndexedDB primary, localStorage mirror for sync gameplay) ----------
 export async function loadProfileIDB() {
   try {
-    const rec = await idbGet('profile', PROFILE_ID);
+    const rec = await idbGet('profile', profileKey());
     if (rec && rec.data) return normalizeProfile(rec.data);
     return null;
   } catch { return null; }
 }
 
-export async function saveProfileIDB(profile) {
+// `key` is the namespace captured when the save was SCHEDULED, not when it
+// lands. The write may be debounced by 250ms, and a sign-up page calls
+// setAccountId() on the same tick it saves — resolving profileKey() at fire
+// time would then store this player's profile under the next player's id,
+// which is the cross-account bridge this module exists to prevent.
+export async function saveProfileIDB(profile, key = profileKey()) {
   const data = normalizeProfile(profile);
   try {
-    await idbPut('profile', { id: PROFILE_ID, data, updatedAt: Date.now() });
+    await idbPut('profile', { id: key, data, updatedAt: Date.now() });
   } catch {}
   return data;
 }
 
 export function loadProfileLS() {
   try {
-    const raw = localStorage.getItem(LEGACY_PROFILE_KEY);
+    const raw = localStorage.getItem(lsKey('profile.v2'));
     if (!raw) return null;
     return normalizeProfile(JSON.parse(raw));
   } catch { return null; }
 }
 
-export function saveProfileLS(profile) {
+export function saveProfileLS(profile, key = lsKey('profile.v2')) {
   try {
     const data = normalizeProfile(profile);
-    localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(data));
+    localStorage.setItem(key, JSON.stringify(data));
   } catch {}
+}
+
+// Device-scoped claim marker, NOT per-account. The pre-namespacing keys hold
+// exactly one player's data, and they may be claimed only once — by whoever
+// loads first (the guest slot). If this marker were namespaced, the next
+// account to sign in would find it absent and re-copy the old player's coins
+// and unlocks into the new account.
+const LEGACY_CLAIMED_KEY = 'rk.legacy-claimed.v1';
+
+export async function migrateLegacyStorage() {
+  try { if (localStorage.getItem(LEGACY_CLAIMED_KEY)) return false; } catch { return false; }
+  let moved = false;
+  try {
+    const legacy = localStorage.getItem(LEGACY_PROFILE_KEY);
+    // Never overwrite a namespaced record that already exists.
+    if (legacy && !localStorage.getItem(lsKey('profile.v2'))) {
+      localStorage.setItem(lsKey('profile.v2'), legacy);
+      moved = true;
+    }
+  } catch {}
+  try {
+    if (isIndexedDBAvailable()) {
+      const rec = await idbGet('profile', LEGACY_PROFILE_ID);
+      if (rec && rec.data && !(await idbGet('profile', profileKey()))) {
+        await idbPut('profile', { id: profileKey(), data: rec.data, updatedAt: Date.now() });
+        moved = true;
+      }
+    }
+  } catch {}
+  try { localStorage.setItem(LEGACY_CLAIMED_KEY, String(Date.now())); } catch {}
+  return moved;
 }
 
 // Unified: IDB wins, else migrate LS, else default. Migrates LS -> IDB.
 export async function loadProfileUnified() {
+  await migrateLegacyStorage();   // keep an existing player's progress
   const fromIDB = await loadProfileIDB();
   if (fromIDB) { saveProfileLS(fromIDB); return fromIDB; }
   const fromLS = loadProfileLS();
@@ -148,14 +209,20 @@ let saveTimer = 0;
 export function saveProfileUnified(profile, opts = {}) {
   const data = normalizeProfile(profile);
   Object.assign(profile, data);
-  saveProfileLS(profile);
+  // Capture the destination namespace NOW. The write below may be debounced by
+  // 250ms; if setAccountId() runs in between, resolving profileKey()/lsKey()
+  // at fire time would file this player's profile under the next player's id.
+  // Both the immediate and the deferred write use this one capture.
+  const nsId = profileKey();
+  const lsId = lsKey('profile.v2');
+  saveProfileLS(profile, lsId);
   if (opts.immediate) {
-    saveProfileIDB(profile);
+    saveProfileIDB(profile, nsId);
     if (!opts.noSync) enqueueSyncOp('profile.save', { coins: profile.coins, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
   } else {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      saveProfileIDB(profile);
+      saveProfileIDB(profile, nsId);
       if (!opts.noSync) enqueueSyncOp('profile.save', { coins: profile.coins, gems: profile.gems, xp: profile.xp, equippedSkin: profile.equippedSkin, unlockedSkins: profile.unlockedSkins, stats: profile.stats });
     }, 250);
   }
@@ -185,6 +252,10 @@ export function saveSettings(patch) {
 // ---------- Match history (IndexedDB) ----------
 export async function recordMatch(result) {
   const entry = {
+    // STEP 2: the owner rides along on the record. The 'matches' store uses
+    // auto-increment keys shared by every account on the device, so ownership
+    // cannot be inferred from the key and must be carried explicitly.
+    accountId: accountId(),
     date: Date.now(),
     rank: result.rank ?? 6,
     laps: result.laps ?? 3,
@@ -203,8 +274,16 @@ export async function recordMatch(result) {
 }
 
 export async function getMatches(limit = 20) {
-  try { return await idbGetAll('matches', limit); }
-  catch { return []; }
+  try {
+    // STEP 2: only this account's races. Without the filter, history and the
+    // stats derived from it (wins, best position, kills, XP) would be shared
+    // by everyone who used the device. Entries written before this change
+    // carry no accountId; they stay visible because in the single-slot era
+    // they could only ever have belonged to whoever is playing now.
+    const mine = accountId();
+    const all = await idbGetAll('matches', Math.max(limit * 20, 400));
+    return all.filter((m) => !m.accountId || m.accountId === mine).slice(0, limit);
+  } catch { return []; }
 }
 
 export async function getMatchStats() {
@@ -224,13 +303,13 @@ export async function getMatchStats() {
 // ---------- Sync-queue stub (shaped like future POST /api/sync) ----------
 export function readLSQueue() {
   try {
-    const raw = localStorage.getItem(SYNC_LS_FALLBACK_KEY);
+    const raw = localStorage.getItem(syncQueueKey());
     const arr = raw ? JSON.parse(raw) : [];
     return Array.isArray(arr) ? arr : [];
   } catch { return []; }
 }
 function writeLSQueue(arr) {
-  try { localStorage.setItem(SYNC_LS_FALLBACK_KEY, JSON.stringify(arr.slice(-200))); } catch {}
+  try { localStorage.setItem(syncQueueKey(), JSON.stringify(arr.slice(-200))); } catch {}
 }
 
 export async function enqueueSyncOp(type, payload) {

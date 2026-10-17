@@ -288,7 +288,13 @@ wss.on('connection', (ws) => {
       }
       // HP is server-owned: client hp is ignored. Revive handshake — the client
       // only clears wrecked after paying gems locally, so trust the transition.
-      if (car.wrecked && !m.wrecked && car.hp <= 0) { car.hp = 100; car.wrecked = false; }
+      // STEP 2: mirror the flag in BOTH directions. Bot, wall, roadblock, mine
+      // and hazard damage are all local to the client — only hits against human
+      // ghosts ever reach this server — so without the first branch the
+      // server's copy of a wrecked player still read 'alive', and the REVIVE
+      // handler below denied every request while the car sat frozen.
+      if (!car.wrecked && !!m.wrecked) { car.wrecked = true; }
+      else if (car.wrecked && !m.wrecked) { car.hp = 100; car.wrecked = false; }
       car.lap = m.lap | 0;
       car.name = tag; car.skin = skin;
       room.lastInputAt.set(id, now);

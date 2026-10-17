@@ -60,7 +60,18 @@ export function getReviveCost(revivesUsed){
   return REVIVE_COSTS[revivesUsed];
 }
 
-const STORAGE_KEY = 'rk.profile.v2';
+import { lsKey } from './identity.js';
+
+// STEP 2 — per-account mirror of the profile.
+// This was the hard-coded string 'rk.profile.v2', i.e. the ONE device-scoped
+// record migrateLegacyStorage() has already claimed and abandoned. Every
+// saveProfile() below was therefore writing the active player's coins, kills
+// and stats back onto that shared legacy key — precisely the bridge this
+// change exists to close. It now names the active account's own key, which is
+// the same key storage.js writes, so the two writers stay consistent.
+// The raw legacy string survives only as storage.js:LEGACY_PROFILE_KEY, the
+// one-shot migration source.
+const storageKey = () => lsKey('profile.v2');
 
 export function createDefaultProfile(){
   return {
@@ -81,7 +92,7 @@ export function createDefaultProfile(){
 
 export function loadProfile(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     if(!raw) return createDefaultProfile();
     const p = JSON.parse(raw);
     // migrate / fill defaults
@@ -105,7 +116,7 @@ export function saveProfile(profile){
   try{
     profile.level = getLevelFromXP(profile.xp);
     profile.tier = getTier(profile.level).name;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    localStorage.setItem(storageKey(), JSON.stringify(profile));
   }catch{}
 }
 
